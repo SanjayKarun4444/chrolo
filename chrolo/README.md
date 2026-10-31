@@ -1,0 +1,100 @@
+# Chrolo — Rewind failures. Prevent regressions.
+
+**Chrolo turns a *reproducible* failed agent workflow into a smaller input fixture and a generated pytest regression test.** This is an early open-source prototype, not a production incident replay system.
+
+The first meaningful capability is dependency-preserving failure minimization: given a known failure predicate and a safe, deterministic workflow runner, Chrolo tries to delete input events while retaining the *same* failure. The result is **1-minimal under tested cascade deletions when the budget suffices**, not guaranteed globally smallest.
+
+## Installation
+
+Python 3.10+:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+pip install -e '.[dev]'
+pytest -q
+```
+
+## First example (no LangGraph dependency)
+
+```bash
+chrolo minimize examples/scenario.json \
+  --run examples.buggy_agent:run \
+  --oracle examples.buggy_agent:is_failure \
+  --output examples/minimal.json \
+  --test examples/test_generated_regression.py
+
+pytest -q examples/test_generated_regression.py
+```
+
+The **last command is expected to fail** because the sample implementation deliberately reproduces the bug. Once you fix the buggy agent, the generated regression test should pass.
+
+## M1: LangGraph-compatible state replay (experimental)
+
+The adapter accepts a graph factory `module:function` returning a compiled LangGraph graph. The graph consumes **recorded input events** from a state key (default `events`). Chrolo executes the graph and saves its per-step state snapshots, then runs the same actual graph from fresh initial state for each candidate subset of events. This is *real graph execution*, not a mocked judgment by an LLM.
+
+Install the optional dependency:
+
+```bash
+pip install -e '.[dev,langgraph]'
+```
+
+Capture a deterministic failed graph run:
+
+```bash
+chrolo capture \
+  --graph examples.langgraph_issue_agent:build_graph \
+  --input examples/langgraph_input.json \
+  --output results/failure.json
+```
+
+Minimize the recorded input event sequence and generate a regression test:
+
+```bash
+chrolo minimize results/failure.json \
+  --oracle examples.langgraph_issue_agent:wrong_issue \
+  --output results/minimal.json \
+  --test results/test_chrolo_regression.py
+
+pytest -q results/test_chrolo_regression.py
+```
+
+Expected demo reduction: 5 events → 2 events (`search`, `cache`). The generated test *fails intentionally* on the vulnerable graph, and should pass after the graph's `choose` node is corrected.
+
+If LangGraph is not installed, you can exercise the same adapter interface against the included **test-only shim**:
+
+```bash
+chrolo capture \
+  --graph examples.fake_graph:build_graph \
+  --input examples/langgraph_input.json \
+  --output results/failure.json
+chrolo minimize results/failure.json \
+  --oracle examples.fake_graph:wrong_issue \
+  --output results/minimal.json \
+  --test results/test_chrolo_regression.py
+```
+
+## Contract & scope
+
+- **Original failure:** the developer supplies a narrow, executable `module:function` oracle returning `True` *only* for the original failure signature. Generic exceptions or any failing state are insufficient evidence.
+- **Dependencies:** events contain `id`, `kind`, `payload`, and optional ordered `requires` IDs. Deletions cascade to dependent events. Missing dependencies aren't invented.
+- **Replay model:** each candidate rebuilds the graph and calls `graph.invoke()` on the original initial state with a subset of recorded **input** events. It does *not* replay arbitrary node updates as inputs.
+- **No complete historical replay:** the adapter **does not capture or freeze LLM responses, external API calls, databases, files, checkpoint state, or nondeterministic execution**. For correct minimization, the graph must be deterministic, side-effect-free, and safe to re-execute with isolated test dependencies.
+- **Model-provider calls are not permitted** in the offline demo; a production adapter must record and mock model/tool boundaries before promoting this to general-purpose agent traces.
+- **No secret redaction yet.** Captures contain full initial state and graph snapshots. Use **only synthetic or carefully sanitized data**, do not ingest private production traces, and do not publish generated fixtures containing sensitive information.
+- **Trusted code only:** `module:function` imports execute arbitrary Python, so do not run fixtures or generated tests from untrusted sources.
+- **Original code:** generated tests import the developer's *actual* graph implementation and assert that the known failure no longer occurs, rather than testing a text summary.
+
+## Roadmap
+
+- **M0:** Dependency-preserving minimizer + test generator, using trusted deterministic harness. Implemented and unit-tested.
+- **M1 (in progress):** LangGraph-compatible graph invocation and capture. Shim and core tested; actual LangGraph integration must be exercised with the optional dependency.
+- **M2:** Model/tool boundary recording, controlled side-effect virtualization and state snapshots; only then can arbitrary real-world agent runs be replayed safely.
+- **M3:** Minimize stateful trajectories using verified dependency inference and reusable failure assertions.
+- **M4:** Benchmark against naïve minimization on labeled real agent failures; publish reproducibility data and integration guides.
+
+## Measuring value
+
+Use reproduction reliability on repeated runs, preserved failure signature, shrink percentage, number of candidate executions, regression sensitivity before/after a fix, and actual developer time saved. A short trace is *not* proof of correct minimization if it reproduces a different failure.
+
+**Naming note:** Chrolo is the project working name; verify GitHub, package registry, domain, and trademark availability before public release.

@@ -1,0 +1,9 @@
+{
+  "events": [
+    {"id": "startup", "kind": "telemetry", "payload": {"message": "boot"}},
+    {"id": "search", "kind": "issue_search", "payload": {"correct_issue_id": 42}},
+    {"id": "cache", "kind": "cached_selection", "requires": ["search"], "payload": {"issue_id": 99}},
+    {"id": "log", "kind": "telemetry", "payload": {"message": "cache warning"}},
+    {"id": "metric", "kind": "telemetry", "payload": {"cpu": 7}}
+  ]
+}

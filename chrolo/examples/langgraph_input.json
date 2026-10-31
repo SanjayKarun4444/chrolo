@@ -1,0 +1,10 @@
+{
+  "initial_state": {"expected_issue_id": 42},
+  "events": [
+    {"id": "boot", "kind": "telemetry", "payload": {"message": "started"}},
+    {"id": "search", "kind": "issue_search", "payload": {"correct_issue_id": 42}},
+    {"id": "cache", "kind": "cached_selection", "payload": {"issue_id": 99}, "requires": ["search"]},
+    {"id": "log", "kind": "telemetry", "payload": {"message": "cache hit"}},
+    {"id": "done", "kind": "telemetry", "payload": {"message": "finished"}}
+  ]
+}

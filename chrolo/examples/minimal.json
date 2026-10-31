@@ -1,0 +1,22 @@
+{
+  "events": [
+    {
+      "id": "search",
+      "kind": "issue_search",
+      "payload": {
+        "correct_issue_id": 42
+      },
+      "requires": []
+    },
+    {
+      "id": "cache",
+      "kind": "cached_selection",
+      "payload": {
+        "issue_id": 99
+      },
+      "requires": [
+        "search"
+      ]
+    }
+  ]
+}
