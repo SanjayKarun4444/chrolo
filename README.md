@@ -74,6 +74,26 @@ chrolo minimize results/failure.json \
   --test results/test_chrolo_regression.py
 ```
 
+## M2: Boundary cassette core (experimental)
+
+Chrolo now includes a framework-neutral recorder and strict offline replay session for explicit model/tool wrapper calls. The versioned `chrolo.interactions.v1` format stores JSON-compatible requests and responses in order. Replay rejects an unexpected call, wrong boundary or target, changed request, or unconsumed interaction. It has no live-call fallback. This core is not yet wired into the LangGraph `capture` or `minimize` commands, and it does not intercept unwrapped services.
+
+A small Python harness can use it directly:
+
+```python
+from chrolo.cassette import CassetteRecorder, ReplaySession
+
+recorder = CassetteRecorder()
+answer = recorder.call("model", "my_model", {"prompt": "..."}, lambda: client.invoke(...))
+trace = recorder.to_dict()  # persist as JSON after reviewing sensitive contents
+
+replay = ReplaySession.from_dict(trace)
+answer = replay.call("model", "my_model", {"prompt": "..."})
+replay.finish()  # verifies every recorded interaction was consumed
+```
+
+Recording invokes the supplied callable and may therefore perform live calls or side effects. Replay accepts no callable and never invokes a provider or tool. Trace payloads may contain confidential data; sanitize them before saving or sharing. Only JSON-compatible values are supported in this first cassette version.
+
 ## Contract & scope
 
 - **Original failure:** the developer supplies a narrow, executable `module:function` oracle returning `True` *only* for the original failure signature. Generic exceptions or any failing state are insufficient evidence. The runner must return a result for the oracle; exceptions from the baseline runner abort minimization, and exceptions from candidate runs are rejected as non-reproductions. Exceptions raised by the oracle are reported separately.
