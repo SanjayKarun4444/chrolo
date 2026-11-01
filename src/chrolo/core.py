@@ -22,8 +22,27 @@ class Event:
 
 
 def parse_events(source: Sequence[Mapping[str, Any]]) -> list[Event]:
-    events = [Event(id=str(e["id"]), kind=str(e["kind"]), payload=e.get("payload", {}), requires=tuple(e.get("requires", []))) for e in source]
-    if len({e.id for e in events}) != len(events):
+    """Parse ordered event data and validate its dependency contract."""
+    if not isinstance(source, Sequence) or isinstance(source, (str, bytes, bytearray)):
+        raise ValueError("Events must be an array")
+
+    events: list[Event] = []
+    for index, raw in enumerate(source):
+        if not isinstance(raw, Mapping):
+            raise ValueError(f"Event at index {index} must be an object")
+        if "id" not in raw or "kind" not in raw:
+            raise ValueError(f"Event at index {index} must contain id and kind")
+        requires = raw.get("requires", [])
+        if not isinstance(requires, (list, tuple)) or any(not isinstance(dep, str) for dep in requires):
+            raise ValueError(f"Event {raw['id']} requires must be an array of event IDs")
+        events.append(Event(
+            id=str(raw["id"]),
+            kind=str(raw["kind"]),
+            payload=raw.get("payload", {}),
+            requires=tuple(requires),
+        ))
+
+    if len({event.id for event in events}) != len(events):
         raise ValueError("Duplicate event IDs")
     seen: set[str] = set()
     for event in events:
@@ -62,7 +81,9 @@ def minimize(
     """Reduce a failing run using dependency-preserving ddmin-like deletions.
 
     The failure predicate must match a specific bug signature. A generic
-    "anything went wrong" predicate can produce misleading reductions.
+    "anything went wrong" predicate can produce misleading reductions. Runner
+    exceptions are not results: a baseline exception aborts with a clear error,
+    and exceptions from candidate runs are rejected as non-reproductions.
 
     Guarantees: every accepted candidate still satisfies is_failure(run(...));
     dependencies remain present. Not guaranteed globally minimum.
@@ -72,9 +93,13 @@ def minimize(
     current = list(events)
     checks = 0
     try:
-        baseline_failed = bool(is_failure(run(list(current))))
+        baseline_result = run(list(current))
     except Exception as exc:
-        raise RuntimeError("Baseline harness raised; encode the expected exception in your oracle") from exc
+        raise RuntimeError("Baseline runner raised before producing a result; expected exceptions are not supported by this oracle contract") from exc
+    try:
+        baseline_failed = bool(is_failure(baseline_result))
+    except Exception as exc:
+        raise RuntimeError("Baseline failure oracle raised while evaluating the runner result") from exc
     checks += 1
     if not baseline_failed:
         raise ValueError("Baseline does not reproduce the specified failure")

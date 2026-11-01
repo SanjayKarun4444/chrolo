@@ -114,7 +114,7 @@ def main():
     args = parser.parse_args()
     try:
         args.handler(args)
-    except (ValueError, TypeError, ModuleNotFoundError, AttributeError, FileNotFoundError) as exc:
+    except (ValueError, TypeError, RuntimeError, ModuleNotFoundError, AttributeError, FileNotFoundError) as exc:
         parser.exit(2, f"chrolo: {exc}\n")
 
 

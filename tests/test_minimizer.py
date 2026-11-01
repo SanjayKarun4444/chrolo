@@ -35,3 +35,50 @@ def test_dependency_validation():
 def test_duplicate_ids():
     with pytest.raises(ValueError, match="Duplicate"):
         parse_events([{"id": "a", "kind": "x"}, {"id": "a", "kind": "x"}])
+
+
+def test_baseline_runner_exception_is_distinguished():
+    def broken_runner(events):
+        raise LookupError("unexpected failure")
+
+    with pytest.raises(RuntimeError, match="Baseline runner raised"):
+        minimize(sample(), broken_runner, is_failure)
+
+
+def test_baseline_oracle_exception_is_distinguished():
+    def broken_oracle(result):
+        raise LookupError("oracle bug")
+
+    with pytest.raises(RuntimeError, match="Baseline failure oracle raised"):
+        minimize(sample(), run, broken_oracle)
+
+
+def test_candidate_runner_exception_is_not_accepted_as_original_failure():
+    events = parse_events([
+        {"id": "bug", "kind": "signal"},
+        {"id": "noise", "kind": "telemetry"},
+    ])
+
+    def runner(candidate):
+        if not any(event.id == "bug" for event in candidate):
+            raise LookupError("different failure")
+        return {"bug": True}
+
+    result = minimize(events, runner, lambda value: value.get("bug") is True)
+    assert [event.id for event in result.events] == ["bug"]
+
+
+def test_event_dependencies_must_be_an_array_of_ids():
+    with pytest.raises(ValueError, match="requires must be an array"):
+        parse_events([{"id": "a", "kind": "x", "requires": "previous"}])
+    with pytest.raises(ValueError, match="requires must be an array"):
+        parse_events([{"id": "a", "kind": "x", "requires": [1]}])
+
+
+def test_event_source_and_entries_must_be_structured():
+    with pytest.raises(ValueError, match="Events must be an array"):
+        parse_events("not events")
+    with pytest.raises(ValueError, match="must be an object"):
+        parse_events(["not an event"])
+    with pytest.raises(ValueError, match="must contain id and kind"):
+        parse_events([{"id": "missing-kind"}])

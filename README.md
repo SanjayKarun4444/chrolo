@@ -76,8 +76,8 @@ chrolo minimize results/failure.json \
 
 ## Contract & scope
 
-- **Original failure:** the developer supplies a narrow, executable `module:function` oracle returning `True` *only* for the original failure signature. Generic exceptions or any failing state are insufficient evidence.
-- **Dependencies:** events contain `id`, `kind`, `payload`, and optional ordered `requires` IDs. Deletions cascade to dependent events. Missing dependencies aren't invented.
+- **Original failure:** the developer supplies a narrow, executable `module:function` oracle returning `True` *only* for the original failure signature. Generic exceptions or any failing state are insufficient evidence. The runner must return a result for the oracle; exceptions from the baseline runner abort minimization, and exceptions from candidate runs are rejected as non-reproductions. Exceptions raised by the oracle are reported separately.
+- **Dependencies:** events contain `id`, `kind`, `payload`, and optional ordered `requires` IDs. `requires` must be an array of string event IDs; dependencies must refer to earlier events. Deletions cascade to dependent events. Missing dependencies aren't invented.
 - **Replay model:** each candidate rebuilds the graph and calls `graph.invoke()` on the original initial state with a subset of recorded **input** events. It does *not* replay arbitrary node updates as inputs.
 - **No complete historical replay:** the adapter **does not capture or freeze LLM responses, external API calls, databases, files, checkpoint state, or nondeterministic execution**. For correct minimization, the graph must be deterministic, side-effect-free, and safe to re-execute with isolated test dependencies.
 - **Model-provider calls are not permitted** in the offline demo; a production adapter must record and mock model/tool boundaries before promoting this to general-purpose agent traces.
