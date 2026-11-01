@@ -36,9 +36,12 @@ def capture_cmd(args):
     recorded = capture_graph(
         resolve(args.graph), initial_state, events,
         graph_target=args.graph, event_key=args.event_key,
+        record_interactions=args.record_interactions,
     )
     _write_json(args.output, recorded)
     print(f"Captured {len(events)} input events and {len(recorded['observations']['state_snapshots'])} graph snapshots")
+    if "interactions" in recorded:
+        print(f"Recorded {len(recorded['interactions']['interactions'])} model/tool interactions")
     print(f"Saved: {args.output}")
 
 
@@ -102,6 +105,10 @@ def main():
     cap.add_argument("--input", required=True, type=Path, help="JSON with initial_state and events")
     cap.add_argument("--output", default=Path("trace.json"), type=Path)
     cap.add_argument("--event-key", default="events")
+    cap.add_argument(
+        "--record-interactions", action="store_true",
+        help="Pass a BoundaryContext to the graph factory and record wrapped model/tool calls",
+    )
     cap.set_defaults(handler=capture_cmd)
     mini = command.add_parser("minimize", help="Minimize a specific reproducible failure")
     mini.add_argument("scenario", type=Path)

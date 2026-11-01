@@ -31,7 +31,7 @@ The **last command is expected to fail** because the sample implementation delib
 
 ## M1: LangGraph-compatible state replay (experimental)
 
-The adapter accepts a graph factory `module:function` returning a compiled LangGraph graph. The graph consumes **recorded input events** from a state key (default `events`). Chrolo executes the graph and saves its per-step state snapshots, then runs the same actual graph from fresh initial state for each candidate subset of events. This is *real graph execution*, not a mocked judgment by an LLM.
+The adapter accepts a graph factory `module:function` returning a compiled LangGraph graph. The graph consumes **recorded input events** from a state key (default `events`). Chrolo executes the graph and saves its per-step state snapshots, then runs the same actual graph from fresh initial state for each candidate subset of events. M2-aware graph factories can also receive a boundary context with `--record-interactions` to capture explicitly wrapped model/tool calls and replay their responses offline. This is *real graph execution*, not a mocked judgment by an LLM.
 
 Install the optional dependency:
 
@@ -76,7 +76,7 @@ chrolo minimize results/failure.json \
 
 ## M2: Boundary cassette core (experimental)
 
-Chrolo now includes a framework-neutral recorder and strict offline replay session for explicit model/tool wrapper calls. The versioned `chrolo.interactions.v1` format stores JSON-compatible requests and responses in order. Replay rejects an unexpected call, wrong boundary or target, changed request, or unconsumed interaction. It has no live-call fallback. This core is not yet wired into the LangGraph `capture` or `minimize` commands, and it does not intercept unwrapped services.
+Chrolo now includes a framework-neutral recorder and strict offline replay session for explicit model/tool wrapper calls. The versioned `chrolo.interactions.v1` format stores JSON-compatible requests and responses in order. Replay rejects an unexpected call, wrong boundary or target, changed request, or unconsumed interaction. It has no live-call fallback. The cassette composes with the existing minimizer through the LangGraph adapter: each candidate gets a fresh replay session and must consume the full cassette before its result reaches the oracle. For capture, pass `--record-interactions`; the graph factory must accept a `BoundaryContext` and route calls through `boundaries.call(boundary, target, request, live_callable)`. In replay, the live callable is never invoked. Existing no-argument factories retain the M1 input-only behavior, and unwrapped services are not intercepted.
 
 A small Python harness can use it directly:
 
@@ -99,7 +99,7 @@ Recording invokes the supplied callable and may therefore perform live calls or 
 - **Original failure:** the developer supplies a narrow, executable `module:function` oracle returning `True` *only* for the original failure signature. Generic exceptions or any failing state are insufficient evidence. The runner must return a result for the oracle; exceptions from the baseline runner abort minimization, and exceptions from candidate runs are rejected as non-reproductions. Exceptions raised by the oracle are reported separately.
 - **Dependencies:** events contain `id`, `kind`, `payload`, and optional ordered `requires` IDs. `requires` must be an array of string event IDs; dependencies must refer to earlier events. Deletions cascade to dependent events. Missing dependencies aren't invented.
 - **Replay model:** each candidate rebuilds the graph and calls `graph.invoke()` on the original initial state with a subset of recorded **input** events. It does *not* replay arbitrary node updates as inputs.
-- **No complete historical replay:** the adapter **does not capture or freeze LLM responses, external API calls, databases, files, checkpoint state, or nondeterministic execution**. For correct minimization, the graph must be deterministic, side-effect-free, and safe to re-execute with isolated test dependencies.
+- **Replay scope:** interaction capture records only model/tool calls explicitly routed through `BoundaryContext`. It does not capture databases, files, checkpoint state, unwrapped services, or nondeterministic execution. Without `--record-interactions`, M1 remains input-event rerun. For correct minimization, graph code must still be safe to re-execute.
 - **Model-provider calls are not permitted** in the offline demo; a production adapter must record and mock model/tool boundaries before promoting this to general-purpose agent traces.
 - **No secret redaction yet.** Captures contain full initial state and graph snapshots. Use **only synthetic or carefully sanitized data**, do not ingest private production traces, and do not publish generated fixtures containing sensitive information.
 - **Trusted code only:** `module:function` imports execute arbitrary Python, so do not run fixtures or generated tests from untrusted sources.
@@ -109,7 +109,7 @@ Recording invokes the supplied callable and may therefore perform live calls or 
 
 - **M0:** Dependency-preserving minimizer + test generator, using trusted deterministic harness. Implemented and unit-tested.
 - **M1 (in progress):** LangGraph-compatible graph invocation and capture. Shim and core tested; actual LangGraph integration must be exercised with the optional dependency.
-- **M2:** Model/tool boundary recording, controlled side-effect virtualization and state snapshots; only then can arbitrary real-world agent runs be replayed safely.
+- **M2 (in progress):** Versioned cassette recording and strict replay for explicitly wrapped model/tool calls, including LangGraph integration. General side-effect virtualization, redaction, and arbitrary real-world trace support remain future work.
 - **M3:** Minimize stateful trajectories using verified dependency inference and reusable failure assertions.
 - **M4:** Benchmark against naïve minimization on labeled real agent failures; publish reproducibility data and integration guides.
 

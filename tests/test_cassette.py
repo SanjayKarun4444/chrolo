@@ -1,5 +1,6 @@
 import pytest
 
+from chrolo.core import minimize, parse_events
 from chrolo.cassette import (
     FORMAT,
     CassetteRecorder,
@@ -122,3 +123,57 @@ def test_trace_validation_rejects_bad_version_sequence_and_ambiguous_outcome():
             "id": "call-000001", "sequence": 0, "boundary": "tool",
             "target": "lookup", "request": {}, "response": None, "error": {},
         }]})
+
+
+
+def test_minimizer_replays_fresh_cassette_per_candidate_without_live_calls():
+    events = parse_events([
+        {"id": "boot", "kind": "telemetry", "payload": {}},
+        {"id": "search", "kind": "issue_search", "payload": {"query": "permission bug"}},
+        {"id": "cache", "kind": "cached_selection", "payload": {"issue_id": 99}, "requires": ["search"]},
+        {"id": "log", "kind": "telemetry", "payload": {}},
+        {"id": "done", "kind": "telemetry", "payload": {}},
+    ])
+    live_calls = {"model": 0, "tool": 0}
+    recorder = CassetteRecorder()
+
+    def live_model():
+        live_calls["model"] += 1
+        return {"issue_id": 42}
+
+    def live_tool():
+        live_calls["tool"] += 1
+        return {"issue_id": 99}
+
+    recorder.call("model", "demo.issue_search", {"query": "permission bug"}, live_model)
+    recorder.call("tool", "demo.fetch_issue", {"issue_id": 99}, live_tool)
+    trace = recorder.to_dict()
+    recorded_call_counts = dict(live_calls)
+
+    def replay_candidate(candidate):
+        # A fresh cursor per candidate prevents one minimization check from
+        # consuming responses needed by another check.
+        replay = ReplaySession.from_dict(trace)
+        search = next((event for event in candidate if event.id == "search"), None)
+        query = search.payload["query"] if search is not None else ""
+        model_result = replay.call(
+            "model", "demo.issue_search", {"query": query}
+        )
+        cache = next((event for event in candidate if event.id == "cache"), None)
+        selected_id = (
+            cache.payload["issue_id"] if cache is not None else model_result["issue_id"]
+        )
+        tool_result = replay.call(
+            "tool", "demo.fetch_issue", {"issue_id": selected_id}
+        )
+        replay.finish()
+        return {"expected_issue_id": 42, "selected_issue_id": tool_result["issue_id"]}
+
+    result = minimize(
+        events,
+        replay_candidate,
+        lambda value: value["expected_issue_id"] == 42 and value["selected_issue_id"] == 99,
+    )
+
+    assert [event.id for event in result.events] == ["search", "cache"]
+    assert live_calls == recorded_call_counts

@@ -210,3 +210,52 @@ class ReplaySession:
         remaining = len(self._interactions) - self._cursor
         if remaining:
             raise ReplayMismatch(self._cursor, f"{remaining} recorded interaction(s) were not consumed")
+
+
+class BoundaryContext:
+    """Uniform call hook supplied to an instrumented graph factory.
+
+    In recording mode ``call`` invokes the supplied live implementation once
+    and records its outcome. In replay mode it delegates only to ReplaySession;
+    the live implementation is required for a shared graph-node API but is
+    never called. ReplaySession itself has no callback parameter or fallback.
+    """
+
+    def __init__(
+        self,
+        *,
+        recorder: CassetteRecorder | None = None,
+        replay: ReplaySession | None = None,
+    ) -> None:
+        if (recorder is None) == (replay is None):
+            raise ValueError("provide exactly one of recorder or replay")
+        self._recorder = recorder
+        self._replay = replay
+
+    @classmethod
+    def recording(cls, recorder: CassetteRecorder) -> "BoundaryContext":
+        return cls(recorder=recorder)
+
+    @classmethod
+    def replaying(cls, replay: ReplaySession) -> "BoundaryContext":
+        return cls(replay=replay)
+
+    @property
+    def mode(self) -> str:
+        return "record" if self._recorder is not None else "replay"
+
+    def call(
+        self,
+        boundary: str,
+        target: str,
+        request: Any,
+        invoke: Callable[[], Any],
+    ) -> Any:
+        """Route an instrumented node call through recording or strict replay."""
+        if not callable(invoke):
+            raise TypeError("invoke must be callable")
+        if self._recorder is not None:
+            return self._recorder.call(boundary, target, request, invoke)
+        # Deliberately do not pass invoke through to ReplaySession.
+        assert self._replay is not None
+        return self._replay.call(boundary, target, request)

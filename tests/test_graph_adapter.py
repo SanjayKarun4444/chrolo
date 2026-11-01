@@ -110,3 +110,62 @@ def test_generated_regression_detects_real_bug_not_different_failure():
     result = replay_recorded(capture, candidate)
     assert not wrong_issue(result)
     assert result["selected_issue_id"] is None
+
+
+
+def test_actual_langgraph_boundary_recording_replay_and_minimization():
+    pytest.importorskip("langgraph")
+    from examples.langgraph_interaction_agent import (
+        LIVE_CALLS, build_graph as interaction_graph, reset_live_calls, wrong_issue as interaction_oracle,
+    )
+
+    reset_live_calls()
+    events = parse_events(INPUT["events"])
+    captured = capture_graph(
+        interaction_graph,
+        INPUT["initial_state"],
+        events,
+        graph_target="examples.langgraph_interaction_agent:build_graph",
+        record_interactions=True,
+    )
+    assert [call["boundary"] for call in captured["interactions"]["interactions"]] == ["model", "tool"]
+    assert LIVE_CALLS == {"model": 1, "tool": 1}
+    assert interaction_oracle(replay_recorded(captured))
+    assert LIVE_CALLS == {"model": 1, "tool": 1}
+
+    result = minimize(events, lambda candidate: replay_recorded(captured, candidate), interaction_oracle)
+    assert [event.id for event in result.events] == ["search", "cache"]
+    assert interaction_oracle(replay_recorded(captured, result.events))
+    assert LIVE_CALLS == {"model": 1, "tool": 1}
+
+
+
+def test_cli_can_capture_and_minimize_recorded_langgraph_boundaries(tmp_path):
+    pytest.importorskip("langgraph")
+    capture = tmp_path / "interaction_trace.json"
+    minimal = tmp_path / "minimal_interaction_trace.json"
+    generated = tmp_path / "test_interaction_regression.py"
+    run_cli = [sys.executable, "-m", "chrolo"]
+
+    command = subprocess.run(
+        run_cli + [
+            "capture", "--graph", "examples.langgraph_interaction_agent:build_graph",
+            "--input", str(ROOT / "examples" / "langgraph_input.json"),
+            "--record-interactions", "--output", str(capture),
+        ], cwd=ROOT, capture_output=True, text=True,
+    )
+    assert command.returncode == 0, command.stderr
+    saved = json.loads(capture.read_text(encoding="utf-8"))
+    assert [item["boundary"] for item in saved["interactions"]["interactions"]] == ["model", "tool"]
+
+    command = subprocess.run(
+        run_cli + [
+            "minimize", str(capture),
+            "--oracle", "examples.langgraph_interaction_agent:wrong_issue",
+            "--output", str(minimal), "--test", str(generated),
+        ], cwd=ROOT, capture_output=True, text=True,
+    )
+    assert command.returncode == 0, command.stderr
+    reduced = json.loads(minimal.read_text(encoding="utf-8"))
+    assert [event["id"] for event in reduced["events"]] == ["search", "cache"]
+    assert reduced["interactions"] == saved["interactions"]

@@ -1,9 +1,9 @@
-"""Checkpoint-free LangGraph-compatible replay adapter.
+"""Checkpoint-free LangGraph-compatible capture and replay adapter.
 
-This adapter intentionally re-executes a developer-provided compiled graph with
-recorded *input events* swapped into a fresh initial state. It does NOT claim to
-replay LLM outputs, tool calls, checkpoint history, or external side effects.
-Using this adapter requires a safe, deterministic, trusted graph factory.
+By default, this adapter re-executes a developer-provided compiled graph with
+recorded input events. Opt-in boundary-aware factories can also record and
+replay model/tool calls explicitly routed through BoundaryContext. It does not
+intercept arbitrary services, checkpoint history, or other external side effects. Use only safe, deterministic, trusted graph factories.
 """
 from __future__ import annotations
 
@@ -12,12 +12,15 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 from .core import Event, parse_events
+from .cassette import BoundaryContext, CassetteRecorder, ReplaySession
 
 FORMAT = "chrolo.langgraph.v1"
 
 
-def _ensure_graph(factory: Callable[[], Any]) -> Any:
-    graph = factory()
+def _ensure_graph(factory: Callable[..., Any], boundaries: BoundaryContext | None = None) -> Any:
+    # No-argument factories remain the default M1 contract. Boundary-aware
+    # factories opt in and receive an explicit recording/replay context.
+    graph = factory() if boundaries is None else factory(boundaries)
     if not callable(getattr(graph, "invoke", None)):
         raise TypeError("Graph factory must return a compiled graph with invoke(state)")
     return graph
@@ -33,13 +36,20 @@ def _input(initial_state: Mapping[str, Any], events: Sequence[Event], key: str) 
 
 @dataclass
 class GraphHarness:
-    factory: Callable[[], Any]
+    factory: Callable[..., Any]
     initial_state: Mapping[str, Any]
     event_key: str = "events"
+    interaction_trace: Mapping[str, Any] | None = None
 
     def __call__(self, events: list[Event]) -> Any:
-        # Fresh graph per candidate to avoid accidental shared graph state.
-        return _ensure_graph(self.factory).invoke(_input(self.initial_state, events, self.event_key))
+        # Fresh graph and replay cursor per candidate.
+        replay = ReplaySession.from_dict(self.interaction_trace) if self.interaction_trace is not None else None
+        boundaries = BoundaryContext.replaying(replay) if replay is not None else None
+        graph = _ensure_graph(self.factory, boundaries)
+        result = graph.invoke(_input(self.initial_state, events, self.event_key))
+        if replay is not None:
+            replay.finish()
+        return result
 
 
 def capture_graph(
@@ -49,6 +59,7 @@ def capture_graph(
     *,
     event_key: str = "events",
     graph_target: str,
+    record_interactions: bool = False,
 ) -> dict[str, Any]:
     """Run a graph once and record its per-step state and initial event fixture.
 
@@ -58,7 +69,9 @@ def capture_graph(
     """
     if not event_key or not event_key.isidentifier():
         raise ValueError("event_key must be an identifier")
-    graph = _ensure_graph(factory)
+    recorder = CassetteRecorder() if record_interactions else None
+    boundaries = BoundaryContext.recording(recorder) if recorder is not None else None
+    graph = _ensure_graph(factory, boundaries)
     if not callable(getattr(graph, "stream", None)):
         raise TypeError("Graph must implement stream(state, stream_mode='values')")
     snapshots: list[Any] = []
@@ -67,7 +80,7 @@ def capture_graph(
         snapshots.append(copy.deepcopy(snapshot))
     if not snapshots:
         raise ValueError("Graph returned no state snapshots")
-    return {
+    capture = {
         "format": FORMAT,
         "graph": graph_target,
         "event_key": event_key,
@@ -75,6 +88,9 @@ def capture_graph(
         "events": [event.to_dict() for event in events],
         "observations": {"state_snapshots": snapshots, "final_state": snapshots[-1]},
     }
+    if recorder is not None:
+        capture["interactions"] = recorder.to_dict()
+    return capture
 
 
 def validate_capture(data: Mapping[str, Any]) -> list[Event]:
@@ -105,4 +121,5 @@ def replay_recorded(capture: Mapping[str, Any], events: Sequence[Event] | None =
         resolve(capture["graph"]),
         capture["initial_state"],
         capture["event_key"],
+        capture.get("interactions"),
     )(list(events) if events is not None else original)
