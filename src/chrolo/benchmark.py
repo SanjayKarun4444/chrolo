@@ -291,7 +291,7 @@ def run_dataset(dataset: Any, *, repeat: int = 20) -> dict[str, Any]:
         "source_revision", "split", "license", "generator_version", "schema_version",
         "included_execution_divergence_cases", "skipped_clean_records",
         "skipped_failures_without_execution_witness", "included_failure_categories",
-        "limitations",
+        "limitations", "synthetic_only",
     )
     reported_metadata = {key: metadata[key] for key in provenance_fields if key in metadata}
 
@@ -339,7 +339,7 @@ def run_dataset(dataset: Any, *, repeat: int = 20) -> dict[str, Any]:
     return {
         "format": "chrolo.benchmark.results.v1",
         "dataset_format": "chrolo.benchmark.dataset.v1",
-        "synthetic_only": False,
+        "synthetic_only": metadata.get("synthetic_only") is True,
         "provider_calls": None,
         "dataset_code_is_sandboxed": False,
         "dataset_metadata": reported_metadata,

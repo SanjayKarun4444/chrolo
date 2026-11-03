@@ -12,6 +12,12 @@ The dataset schema is demonstrated in [`../examples/benchmark_dataset.json`](../
 
 Compare runs from the same environment. Replay timing and fixture sizes are descriptive measurements; they do not by themselves establish that a minimized trace preserves the intended failure. Review the oracle, repeated reproduction rate, accepted result, and post-fix sensitivity for each case.
 
+## Executable synthetic task-oracle cases
+
+Run `python -m chrolo benchmark --dataset examples/task_oracle_dataset.json --repeat 20` for three reproducible task failures backed by an in-memory tool environment. Unlike the AgentFailureBench trace-differential adapter, this runner executes selected tool calls against a fresh mutable task state on every candidate and checks the resulting task state: wrong ticket assignment, duplicate invoice payment, or deletion of a protected file. Tool outputs can feed later tool arguments through explicit event references, and those dependencies constrain minimization. Paired fixed runners correct or skip the faulty action and should clear the original signature.
+
+The 20-repeat reference run reproduced and preserved all three exact task-state signatures, reached 1-minimal results for all three cases, and cleared all three signatures under their fixed runners. Mean event shrink was 50.00%, matching the naïve baseline; Chrolo required 15 checks per case versus 6 for the baseline. This is executable synthetic task-level evidence for the runner/oracle contract, not evidence from production-agent traces or external services. Reports mark this fixture `synthetic_only: true`.
+
 `MAD_full_dataset.json` (the MAD/MAST corpus) is present locally as an observational corpus: it contains 1,642 execution traces and 14 binary failure-mode annotations. Its annotations are LLM-produced, and each row contains a trace string rather than an executable runner or failure oracle. It therefore cannot be passed to `chrolo benchmark --dataset` or used to claim minimizer reliability. See the [upstream dataset card](https://huggingface.co/datasets/mcemri/MAST-Data) for the schema, license, and annotation provenance. The corpus file is gitignored because of its size.
 
 ## AgentTelemetry fault-trace integration

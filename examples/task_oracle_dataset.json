@@ -1,0 +1,54 @@
+{
+  "format": "chrolo.benchmark.dataset.v1",
+  "metadata": {
+    "source": "Chrolo deterministic task-oracle examples",
+    "synthetic_only": true,
+    "source_records": 3,
+    "comparison_scope": "minimization of selected agent tool calls by re-executing them in isolated deterministic in-memory task environments and checking an exact task-state failure signature",
+    "limitations": "hand-authored synthetic tasks; tool environment and fixes are local simulations, not production agent runs"
+  },
+  "cases": [
+    {
+      "id": "wrong_ticket_assignment",
+      "events": [
+        {"id": "task-spec", "kind": "task_spec", "payload": {"task_id": "ticket-101", "initial_state": {"tickets": {"TCK-101": {"assigned_team": "Unassigned", "status": "open"}}}, "oracle": {"kind": "wrong_assignment", "ticket_id": "TCK-101", "expected_team": "Billing"}, "expected_failure_signature": "wrong_assignment:TCK-101:General", "fixes": {"assign-wrong-team": {"arguments": {"team": "Billing"}}}}},
+        {"id": "noise-before", "kind": "log", "payload": {"message": "planning started"}},
+        {"id": "lookup-ticket", "kind": "agent_step", "payload": {"tool_call": {"name": "lookup_ticket", "arguments": {"ticket_id": "TCK-101"}}}, "requires": ["task-spec"]},
+        {"id": "assign-wrong-team", "kind": "agent_step", "payload": {"tool_call": {"name": "assign_ticket", "arguments": {"ticket_id": {"$event": "lookup-ticket", "path": ["ticket_id"]}, "team": "General"}}}, "requires": ["task-spec", "lookup-ticket"]},
+        {"id": "add-note", "kind": "agent_step", "payload": {"tool_call": {"name": "add_note", "arguments": {"ticket_id": "TCK-101", "text": "Reviewed"}}}, "requires": ["task-spec"]},
+        {"id": "noise-after", "kind": "log", "payload": {"message": "workflow complete"}}
+      ],
+      "runner": "examples.task_oracle_benchmark:run_task",
+      "oracle": "examples.task_oracle_benchmark:is_original_task_failure",
+      "fixed_runner": "examples.task_oracle_benchmark:run_task_fixed"
+    },
+    {
+      "id": "duplicate_invoice_payment",
+      "events": [
+        {"id": "task-spec", "kind": "task_spec", "payload": {"task_id": "invoice-9", "initial_state": {"invoices": {"INV-9": {"amount_due_cents": 5000, "paid_cents": 5000, "payment_count": 1}}}, "oracle": {"kind": "duplicate_payment", "invoice_id": "INV-9"}, "expected_failure_signature": "duplicate_payment:INV-9:2", "fixes": {"charge-again": {"skip": true}}}},
+        {"id": "noise-before", "kind": "log", "payload": {"message": "invoice workflow started"}},
+        {"id": "lookup-invoice", "kind": "agent_step", "payload": {"tool_call": {"name": "lookup_invoice", "arguments": {"invoice_id": "INV-9"}}}, "requires": ["task-spec"]},
+        {"id": "charge-again", "kind": "agent_step", "payload": {"tool_call": {"name": "charge_invoice", "arguments": {"invoice_id": {"$event": "lookup-invoice", "path": ["invoice_id"]}, "amount_cents": 5000}}}, "requires": ["task-spec", "lookup-invoice"]},
+        {"id": "add-note", "kind": "agent_step", "payload": {"tool_call": {"name": "add_note", "arguments": {"invoice_id": "INV-9", "text": "Payment submitted"}}}, "requires": ["task-spec"]},
+        {"id": "noise-after", "kind": "log", "payload": {"message": "invoice workflow complete"}}
+      ],
+      "runner": "examples.task_oracle_benchmark:run_task",
+      "oracle": "examples.task_oracle_benchmark:is_original_task_failure",
+      "fixed_runner": "examples.task_oracle_benchmark:run_task_fixed"
+    },
+    {
+      "id": "delete_protected_file",
+      "events": [
+        {"id": "task-spec", "kind": "task_spec", "payload": {"task_id": "files-17", "initial_state": {"files": {"/records/active.json": "active", "/tmp/duplicate.json": "duplicate"}}, "oracle": {"kind": "protected_file_missing", "path": "/records/active.json"}, "expected_failure_signature": "protected_file_missing:/records/active.json", "fixes": {"delete-wrong-file": {"arguments": {"path": "/tmp/duplicate.json"}}}}},
+        {"id": "noise-before", "kind": "log", "payload": {"message": "file review started"}},
+        {"id": "list-files", "kind": "agent_step", "payload": {"tool_call": {"name": "list_files", "arguments": {}}}, "requires": ["task-spec"]},
+        {"id": "delete-wrong-file", "kind": "agent_step", "payload": {"tool_call": {"name": "delete_file", "arguments": {"path": {"$event": "list-files", "path": ["paths", 0]}}}}, "requires": ["task-spec", "list-files"]},
+        {"id": "add-note", "kind": "agent_step", "payload": {"tool_call": {"name": "add_note", "arguments": {"text": "File cleanup completed"}}}, "requires": ["task-spec"]},
+        {"id": "noise-after", "kind": "log", "payload": {"message": "file review complete"}}
+      ],
+      "runner": "examples.task_oracle_benchmark:run_task",
+      "oracle": "examples.task_oracle_benchmark:is_original_task_failure",
+      "fixed_runner": "examples.task_oracle_benchmark:run_task_fixed"
+    }
+  ]
+}
