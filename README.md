@@ -2,7 +2,7 @@
 
 **Chrolo turns a *reproducible* failed agent workflow into a smaller input fixture and a generated pytest regression test.** This is an early open-source prototype, not a production incident replay system.
 
-The first meaningful capability is dependency-preserving failure minimization: given a known failure predicate and a safe, deterministic workflow runner, Chrolo tries to delete input events while retaining the *same* failure. The result is **1-minimal under tested cascade deletions when the budget suffices**, not guaranteed globally smallest.
+The first meaningful capability is dependency-preserving failure minimization: given a known failure predicate and a safe, deterministic workflow runner, Chrolo tries to delete input events while retaining the *same* failure. Results include accepted deletion history, candidate rejection counts, and whether the fixture is 1-minimal under tested cascade deletions within budget. It is not guaranteed globally smallest.
 
 ## Installation
 
@@ -31,7 +31,29 @@ The **last command is expected to fail** because the sample implementation delib
 
 ## M1: LangGraph-compatible state replay (experimental)
 
-The adapter accepts a graph factory `module:function` returning a compiled LangGraph graph. The graph consumes **recorded input events** from a state key (default `events`). Chrolo executes the graph and saves its per-step state snapshots, then runs the same actual graph from fresh initial state for each candidate subset of events. M2-aware graph factories can also receive a boundary context with `--record-interactions` to capture explicitly wrapped model/tool calls and replay their responses offline. This is *real graph execution*, not a mocked judgment by an LLM.
+The adapter accepts a graph factory `module:function` returning a compiled LangGraph graph. The graph consumes **recorded input events** from a state key (default `events`). Chrolo executes the graph and saves the input fixture; full per-step state snapshots are omitted by default to limit trace exposure. Add `--include-snapshots` when you need snapshots for debugging. Minimization runs the same graph from fresh initial state for each candidate subset of events. M2-aware graph factories can also receive a boundary context with `--record-interactions` to capture explicitly wrapped model/tool calls and replay their responses offline. This is *real graph execution*, not a mocked judgment by an LLM.
+
+By default, a graph exception aborts capture as before. Add `--capture-exceptions` to write a `chrolo.langgraph.v2` capture with a versioned `outcome` containing only the exception class; exception messages and stack traces are omitted. Existing `chrolo.langgraph.v1` captures remain supported. Replay returns a structured `{ "status": "exception", "exception_type": "..." }` result for the user's failure oracle, or `{ "status": "success" }` if the exception no longer occurs. Input-only captures still require `--allow-live-side-effects` for replay and minimization.
+
+```bash
+chrolo capture \
+  --graph examples.failing_graph:build_graph \
+  --input examples/failing_graph_input.json \
+  --capture-exceptions \
+  --output results/failure.json
+
+chrolo replay results/failure.json \
+  --allow-live-side-effects \
+  --oracle examples.failing_graph:original_failure
+
+chrolo minimize results/failure.json \
+  --allow-live-side-effects \
+  --oracle examples.failing_graph:original_failure \
+  --output results/minimal.json \
+  --test results/test_failure_regression.py
+```
+
+The generated regression test fails while the exception signature remains and passes after changing the fixture's graph target to `examples.failing_graph:build_fixed_graph`.
 
 Install the optional dependency:
 
@@ -48,16 +70,21 @@ chrolo capture \
   --output results/failure.json
 ```
 
+Add `--include-snapshots` to retain full per-step graph states when debugging; snapshots may contain sensitive data.
+
 Minimize the recorded input event sequence and generate a regression test:
 
 ```bash
 chrolo minimize results/failure.json \
   --oracle examples.langgraph_issue_agent:wrong_issue \
+  --allow-live-side-effects \
   --output results/minimal.json \
   --test results/test_chrolo_regression.py
 
 pytest -q results/test_chrolo_regression.py
 ```
+
+Use `chrolo replay results/failure.json --oracle examples.langgraph_issue_agent:wrong_issue` to rerun it. A capture with a cassette replays wrapped model/tool calls offline. An input-only capture re-executes the graph and requires `--allow-live-side-effects`; its output labels that mode because unwrapped calls can still reach live services.
 
 Expected demo reduction: 5 events → 2 events (`search`, `cache`). The generated test *fails intentionally* on the vulnerable graph, and should pass after the graph's `choose` node is corrected.
 
@@ -70,15 +97,37 @@ chrolo capture \
   --output results/failure.json
 chrolo minimize results/failure.json \
   --oracle examples.fake_graph:wrong_issue \
+  --allow-live-side-effects \
   --output results/minimal.json \
   --test results/test_chrolo_regression.py
 ```
 
 ## M2: Boundary cassette core (experimental)
 
-Chrolo now includes a framework-neutral recorder and strict offline replay session for explicit model/tool wrapper calls. The versioned `chrolo.interactions.v1` format stores JSON-compatible requests and responses in order. Replay rejects an unexpected call, wrong boundary or target, changed request, or unconsumed interaction. It has no live-call fallback. The cassette composes with the existing minimizer through the LangGraph adapter: each candidate gets a fresh replay session and must consume the full cassette before its result reaches the oracle. For capture, pass `--record-interactions`; the graph factory must accept a `BoundaryContext` and route calls through `boundaries.call(boundary, target, request, live_callable)`. In replay, the live callable is never invoked. Existing no-argument factories retain the M1 input-only behavior, and unwrapped services are not intercepted.
+Chrolo now includes a framework-neutral recorder and strict offline replay session for explicit model/tool wrapper calls. The versioned `chrolo.interactions.v2` format stores JSON-compatible requests and responses in order, with a capture timestamp, execution ID, Chrolo version, and adapter versions. It can also store optional JSON call context such as a stable node name; replay requires the same context. Chrolo can still read legacy `chrolo.interactions.v1` cassettes. Normal replay rejects an unexpected call, wrong boundary or target, changed request/context, or unconsumed interaction. It has no live-call fallback. During `minimize`, each candidate gets a fresh replay session and may consume only an exact, in-order subsequence of the original cassette; records for calls the reduced graph no longer makes are pruned from the output. The generated regression test then replays the reduced cassette strictly and requires full consumption. For capture, pass `--record-interactions`; the graph factory must accept a `BoundaryContext` and route calls through `boundaries.call(boundary, target, request, live_callable)`. In replay, the live callable is never invoked. Existing no-argument factories retain the M1 input-only behavior, and unwrapped services are not intercepted.
 
 A small Python harness can use it directly:
+
+```bash
+chrolo capture \
+  --graph examples.interaction_minimization:build_graph \
+  --input examples/interaction_minimization_input.json \
+  --record-interactions \
+  --output results/interaction-failure.json
+
+chrolo replay results/interaction-failure.json \
+  --oracle examples.interaction_minimization:original_failure
+
+chrolo minimize results/interaction-failure.json \
+  --oracle examples.interaction_minimization:original_failure \
+  --output results/interaction-minimal.json \
+  --test results/test_interaction_regression.py
+
+chrolo replay results/interaction-minimal.json \
+  --oracle examples.interaction_minimization:original_failure
+```
+
+The example's unnecessary diagnostic event and its tool call are pruned together. Both the captured and minimized fixtures replay offline; the final replay still requires every retained cassette call to match and be consumed.
 
 ```python
 from chrolo.cassette import CassetteRecorder, ReplaySession
@@ -92,26 +141,70 @@ answer = replay.call("model", "my_model", {"prompt": "..."})
 replay.finish()  # verifies every recorded interaction was consumed
 ```
 
-Recording invokes the supplied callable and may therefore perform live calls or side effects. Replay accepts no callable and never invokes a provider or tool. Trace payloads may contain confidential data; sanitize them before saving or sharing. Only JSON-compatible values are supported in this first cassette version.
+`BoundaryTool(function, boundaries, "module.tool", context={"node": "search"})` provides the same explicit boundary for a JSON-argument tool; replay returns the recorded value without calling `function`. An optional buffered LangChain chat adapter is available with `pip install -e '.[langchain]'`. Wrap the model with `BoundaryChatModel(model, boundaries, "provider:model-version", context={"node": "planner"})` and call `.invoke(messages, **kwargs)`. Record with `BoundaryContext.recording(recorder)` and replay with `BoundaryContext.replaying(session)`. The adapter preserves LangChain messages and generation metadata in the cassette; streaming is not supported. Only calls made through these wrappers are captured.
+
+Recording invokes the supplied callable and may therefore perform live calls or side effects. Replay accepts no callable and never invokes a provider or tool. Trace payloads may contain confidential data. Use `chrolo inspect trace.json` for a payload-free summary, or redact selected JSON Pointer paths before sharing:
+
+```bash
+chrolo redact trace.json --path /initial_state/api_token --path "/interactions/interactions/*/request/authorization" --output trace.sanitized.json
+```
+
+Redaction replaces values with `[REDACTED]`, records a report, and marks the trace non-replayable because redacted inputs or responses may change matching or outcomes. The optional `chrolo scan` heuristic can flag likely secrets by path, but it may miss secrets in prose or unsupported formats; review the trace and choose sensitive paths before sharing. Only JSON-compatible values are supported in this first cassette version.
+
+Capture can also project selected fields with repeatable `--include-path` and `--exclude-path` JSON Pointer options. Filtered output is marked non-replayable because removed values can affect execution or interaction matching. Use these options to prepare a review copy; retain the original capture for replay.
+
+## Stateful trajectory minimization (experimental)
+
+State transitions must be deterministic and side-effect safe, and must read and write through `TrackedState`. Nested values are returned as copies; after editing one, assign it back to its top-level state key so the change is tracked. Chrolo detects top-level read-after-write edges and retains an edge only if removing its producer changes the consumer's written state or makes that consumer fail. The supplied oracle remains authoritative during minimization.
+
+```bash
+chrolo infer-dependencies examples/stateful_scenario.json \
+  --step examples.stateful_agent:step \
+  --oracle examples.stateful_agent:wrong_issue \
+  --output results/stateful_dependencies.json
+
+chrolo minimize results/stateful_dependencies.json \
+  --trajectory-step examples.stateful_agent:step \
+  --oracle examples.stateful_agent:wrong_issue \
+  --output results/stateful_minimal.json \
+  --test results/test_stateful_regression.py
+```
+
+This is an instrumented transition API, not automatic inference inside arbitrary LangGraph nodes. The transition and oracle targets import trusted Python code and can have side effects.
 
 ## Contract & scope
 
+Run `chrolo benchmark` for a synthetic, offline reliability report covering event reduction, cassette replay, mismatch/error rejection, replay side effects, and a deliberately nondeterministic unwrapped call. It makes no provider calls and is not a substitute for benchmarking labeled real failures.
+
+For reviewed, labeled cases, `chrolo benchmark --dataset benchmarks.json` compares Chrolo with a naïve one-pass deletion baseline. Dataset entries reference trusted `runner` or `step` and `oracle` Python functions, with an optional fixed runner/step to measure regression sensitivity; those imports are not sandboxed. See [examples/benchmark_dataset.json](examples/benchmark_dataset.json) for the schema. Do not use untrusted datasets.
+
+For a mobile-friendly local trace desk, run `chrolo serve` and open the printed address. It can inspect, scan for likely secrets, redact, and filter uploaded JSON traces without executing graph code or saving uploads on the server. To access it from a phone, bind to a trusted private network and use HTTPS with a certificate trusted by your devices:
+
+```bash
+chrolo serve --host 0.0.0.0 --tls-certfile cert.pem --tls-keyfile key.pem
+```
+
+For `--host 0.0.0.0`, startup lists the private IPv4 URLs it can discover and prints the Basic Auth username (`chrolo`) and generated password. From outside the local Wi-Fi, connect both devices to the same private VPN and open the workstation's VPN address; do not expose the port to the public internet. The certificate must be trusted by the phone and match the address you open. For a private LAN or VPN where TLS is not configured, the server prints a warning; Basic Auth and trace uploads are then unencrypted at the app layer. Filtered and redacted downloads cannot be replayed.
+
+Run `chrolo scan trace.json` to list likely secret paths and detector reasons without printing matched values. The heuristic checks sensitive field names and common credential formats; it may miss secrets embedded in prose or unsupported formats. Review candidates, then use `chrolo redact` with the returned paths. A clean scan is not proof that a trace is safe to share.
+
 - **Original failure:** the developer supplies a narrow, executable `module:function` oracle returning `True` *only* for the original failure signature. Generic exceptions or any failing state are insufficient evidence. The runner must return a result for the oracle; exceptions from the baseline runner abort minimization, and exceptions from candidate runs are rejected as non-reproductions. Exceptions raised by the oracle are reported separately.
 - **Dependencies:** events contain `id`, `kind`, `payload`, and optional ordered `requires` IDs. `requires` must be an array of string event IDs; dependencies must refer to earlier events. Deletions cascade to dependent events. Missing dependencies aren't invented.
+- **Check counts:** `checks` includes the baseline run and every candidate run actually evaluated; candidates that raise still count. Deletions skipped because cascade removal would change nothing do not count.
 - **Replay model:** each candidate rebuilds the graph and calls `graph.invoke()` on the original initial state with a subset of recorded **input** events. It does *not* replay arbitrary node updates as inputs.
 - **Replay scope:** interaction capture records only model/tool calls explicitly routed through `BoundaryContext`. It does not capture databases, files, checkpoint state, unwrapped services, or nondeterministic execution. Without `--record-interactions`, M1 remains input-event rerun. For correct minimization, graph code must still be safe to re-execute.
-- **Model-provider calls are not permitted** in the offline demo; a production adapter must record and mock model/tool boundaries before promoting this to general-purpose agent traces.
-- **No secret redaction yet.** Captures contain full initial state and graph snapshots. Use **only synthetic or carefully sanitized data**, do not ingest private production traces, and do not publish generated fixtures containing sensitive information.
+- **No hosted provider calls occur** in the checked-in examples or synthetic benchmark. Live model/tool access occurs only if a developer explicitly starts a recording run through an instrumented boundary. Replay uses recorded values; calls that bypass the wrappers remain outside Chrolo's control.
+- **Trace privacy:** `chrolo redact` replaces user-selected JSON Pointer paths and marks the result non-replayable; `chrolo inspect` prints counts and formats without payloads. `chrolo scan` can flag likely secrets without printing their values, but scanning is heuristic and cannot guarantee detection. Captures may still contain sensitive data, so review traces before sharing.
 - **Trusted code only:** `module:function` imports execute arbitrary Python, so do not run fixtures or generated tests from untrusted sources.
 - **Original code:** generated tests import the developer's *actual* graph implementation and assert that the known failure no longer occurs, rather than testing a text summary.
 
 ## Roadmap
 
 - **M0:** Dependency-preserving minimizer + test generator, using trusted deterministic harness. Implemented and unit-tested.
-- **M1 (in progress):** LangGraph-compatible graph invocation and capture. Shim and core tested; actual LangGraph integration must be exercised with the optional dependency.
-- **M2 (in progress):** Versioned cassette recording and strict replay for explicitly wrapped model/tool calls, including LangGraph integration. General side-effect virtualization, redaction, and arbitrary real-world trace support remain future work.
-- **M3:** Minimize stateful trajectories using verified dependency inference and reusable failure assertions.
-- **M4:** Benchmark against naïve minimization on labeled real agent failures; publish reproducibility data and integration guides.
+- **M1:** LangGraph-compatible graph invocation and capture, with full snapshots opt-in.
+- **M2 (experimental):** Versioned cassette recording and strict replay for explicitly wrapped model/tool calls, including LangGraph integration. Provider SDK adapters, unwrapped side-effect capture, and arbitrary trace support remain future work.
+- **M3 (experimental):** Infer stateful top-level read-after-write dependencies with `TrackedState`, verify each edge with a direct intervention, then minimize using those dependencies and the supplied failure oracle. Arbitrary graph dependency inference remains unsupported.
+- **M4 (in progress):** `chrolo benchmark` includes synthetic contract cases and a reproducible bridge to AgentTelemetry's mock-backed fault-injection traces. The bridge checks detector labels across all 170 generated rows (78 true positives, 62 false negatives, 0 false positives, 30 true negatives), then measures minimization on the 78 detected cases. All 1,560 faulted replays preserve the detector signature; 78/78 paired runs with fault injection disabled clear it. This measures telemetry detector signals, not task-level agent failure. The supplied MAD/MAST corpus has labels but no deterministic runners or failure oracles, so real-task minimization scores remain open; see [benchmark instructions](benchmarks/README.md).
 
 ## Measuring value
 

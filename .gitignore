@@ -6,3 +6,15 @@ __pycache__/
 dist/
 build/
 results/
+data/
+trace.json
+failure.json
+minimal-failure.json
+*.trace.json
+*.sanitized.json
+*.redacted.json
+*.filtered.json
+# Large local corpus supplied for benchmark evaluation; keep out of source control.
+MAD_full_dataset.json
+# Temporary external harness checkout used for dataset generation.
+AgentTelemetry/

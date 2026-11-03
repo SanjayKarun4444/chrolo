@@ -1,5 +1,7 @@
 # Chrolo roadmap: reliable agent failure replay
 
+Current implementation and resume checkpoint: [progress.md](progress.md).
+
 ## Product goal
 
 Chrolo turns a failed agent execution into a small, reviewable, deterministic regression case. A developer should be able to identify the failure, determine which inputs and external interactions were necessary, replay it without contacting live providers or repeating tool side effects, and keep a test that detects the bug after the agent code changes.
@@ -18,7 +20,7 @@ The product claim should remain precise: Chrolo minimizes a captured execution w
 
 ## Current foundation
 
-M0 provides dependency-preserving input event minimization and pytest generation using a caller-supplied deterministic runner and failure oracle. M1 adds experimental LangGraph-compatible input-event capture and replay: it invokes a fresh graph with a reduced input event list and can save state snapshots. M1 does not record model responses, tool responses, checkpoint history, or arbitrary side effects.
+M0 provides dependency-preserving input event minimization and pytest generation using a caller-supplied deterministic runner and failure oracle. M1 adds experimental LangGraph-compatible input-event capture and replay: it invokes a fresh graph with a reduced input event list; full state snapshots are opt-in. M2 adds a framework-neutral cassette for explicitly wrapped model/tool calls and LangGraph integration. Provider SDKs and arbitrary side effects remain outside capture.
 
 The M1 contract stabilization work clarifies malformed event rejection and distinguishes baseline runner errors from baseline oracle errors. Candidate exceptions are rejected as non-reproductions. The M1 suite has been exercised with the real LangGraph integration when that optional dependency is installed.
 
@@ -32,6 +34,7 @@ The M1 contract stabilization work clarifies malformed event rejection and disti
 4. Keep the existing result API compatible where possible; explain budget limits and the scope of the 1-minimality claim.
 5. Keep CLI errors concise and actionable.
 6. Preserve current M0 and M1 fixture behavior and document the boundary between snapshots and replayable inputs.
+7. Report accepted deletion history, candidate rejection categories, and whether 1-minimality was verified within budget.
 
 ### Acceptance criteria
 
@@ -42,6 +45,10 @@ The M1 contract stabilization work clarifies malformed event rejection and disti
 - Existing M0 and M1 examples continue to work.
 
 ## Phase 1: Specify the M2 interaction trace
+
+### Current status
+
+New interaction cassettes use `chrolo.interactions.v2` with a schema version, Chrolo version, UTC capture timestamp, execution UUID, adapter-version map, and optional per-call JSON context that is checked during replay. Replay remains backward compatible with v1 cassettes. The enclosing graph capture continues to hold initial state and input events. With opt-in `--capture-exceptions`, Chrolo writes a `chrolo.langgraph.v2` capture containing a versioned `chrolo.outcome.v1` status and exception class (never message or stack); replay returns that outcome as structured data for the caller-supplied oracle, and the default capture behavior still writes `chrolo.langgraph.v1` and raises on exceptions. Environment fingerprints and project metadata are not yet recorded; M2 therefore remains experimental.
 
 ### Objective
 
@@ -119,15 +126,19 @@ Do not claim capture of arbitrary HTTP calls, direct unwrapped SDK use, subproce
 
 ## Phase 4: Minimize against a recorded cassette
 
+### Current status
+
+Cassette-aware `minimize` now replays each candidate against an exact ordered subsequence of recorded boundary calls. Calls the reduced graph no longer makes are pruned from the output cassette; calls still made must match a recorded boundary, target, request, and context exactly. The final fixture is checked once more with ordinary full-consumption replay, and that verification consumes one check from the shared `--max-checks` budget. This prunes unused recorded calls associated with reduced inputs; it does not edit graph code to remove calls the graph still makes.
+
 ### Candidate lifecycle
 
-For each candidate, create a fresh graph/agent and replay session, execute against the reduced inputs, collect result/error/mismatches/consumption, and evaluate the original oracle only if execution is valid under the declared replay policy. Accept only if the original signature remains and replay completed without mismatch.
+For each candidate, create a fresh graph/agent and replay session, execute against the reduced inputs, collect result/error/mismatches/consumption, and evaluate the original oracle only if execution is valid under the declared replay policy. In normal replay, require the complete cassette. During minimization, allow only exact ordered-subsequence matching: a candidate may skip recorded interactions that its reduced execution no longer calls, but it cannot invent a response, change a request, or reorder calls. Retain only records actually consumed by the accepted candidate, reindex their sequence numbers, and verify the minimized fixture with ordinary strict replay.
 
-Initially use strict ordered matching. Report missing, unexpected, reordered, mismatched, and unused interactions rather than silently skipping or semantically guessing a match. Any later relaxed matching policy must be explicit and tested for ambiguity.
+Normal replay uses strict ordered matching and reports missing, unexpected, reordered, mismatched, and unused interactions. The minimizer's explicit deletion-only subsequence mode skips a record only when the current exact boundary, target, request, and context uniquely match a later record; duplicate future matches are rejected as ambiguous. This policy is covered separately from normal strict replay.
 
 ### Result reporting
 
-Report original/reduced event counts, oracle/replay checks, accepted deletion history, candidate rejection counts by reason, unused interaction records, and whether the result is 1-minimal under the cascade-deletion strategy and available budget.
+Report original/reduced event and interaction counts, oracle/replay checks, accepted deletion history, candidate rejection counts by reason, pruned unused interaction records, and whether the result is 1-minimal under the cascade-deletion strategy and available budget.
 
 ### Acceptance criteria
 
@@ -135,7 +146,24 @@ Report original/reduced event counts, oracle/replay checks, accepted deletion hi
 - A different exception or changed request/order is rejected with a clear reason.
 - Generic M0 minimization continues to work.
 
+## Stateful trajectory milestone (M3)
+
+### Current status
+
+An experimental `TrackedState` transition API records top-level read-after-write relations. `infer-dependencies` verifies each edge by removing its producer and checking the consumer's output state or failure. `minimize --trajectory-step` then applies those inferred `requires` edges with the existing caller-supplied oracle. It does not infer dependencies inside arbitrary graph frameworks, nested in-place mutations, or unwrapped side effects.
+
+### Acceptance criteria
+
+- A known state-dependent failure infers a dependency and remains reproducible after minimization.
+- A read that does not affect consumer state does not create a dependency.
+- Baseline oracle/runner failures are distinct from candidate failures.
+- Generated regression tests replay the stateful transition from the fixture.
+
 ## Phase 5: Trace safety and privacy
+
+### Current status
+
+The CLI provides payload-free `inspect` summaries with file size, explicit JSON Pointer redaction, capture-time include/exclude projections with `*` wildcards, and `scan` findings that expose paths and reasons without matched values. The heuristic checks sensitive field names and selected high-signal credential formats; free-text and unsupported formats may be missed. The trace desk offers the same scan before redaction. Sanitized or filtered traces are marked non-replayable and refused by replay. Capture omits full state snapshots by default; `--include-snapshots` opts in.
 
 ### Controls
 
@@ -158,6 +186,14 @@ Consider encryption only after trace format and key-management needs are underst
 
 Keep `minimize` backward compatible. Candidate commands/workflows are `capture`, offline `replay`, cassette-aware `minimize`, and metadata-only `inspect`; finalize names after the schema and adapter lifecycle are settled.
 
+### Current status
+
+`chrolo replay` and `chrolo minimize` label cassette-backed replay versus input-only graph re-execution, offer an optional replay failure oracle, hide recorded provider error text, and require `--allow-live-side-effects` before input-only graph code can be re-executed. `capture --capture-exceptions` opts into the versioned v2 capture with a privacy-preserving exception-class outcome so callers can replay and minimize exception failures without storing message or stack text; v1 capture behavior remains the default.
+
+An optional LangChain `BaseChatModel` wrapper routes buffered `.invoke()` calls through the cassette boundary. The reusable `BoundaryTool` wraps JSON-argument tools and proves replay avoids its live side effect. Fake-model tests cover offline replay, request mismatch, and recorded provider errors; the LangGraph integration test covers both model and tool calls together. Streaming and provider-specific SDK guarantees are not supported.
+
+`chrolo serve` provides a responsive, in-memory trace desk for inspect/scan/redact/filter operations. Scan results expose only paths and can be added to the redaction list with one tap. Loopback is the default; remote binding requires Basic authentication. For all-interface binds, startup lists discoverable private IPv4 URLs and prints the required username and password. Optional HTTPS accepts a user-supplied PEM certificate and key; without TLS, remote credentials and uploads are unencrypted at the app layer and the server warns at startup. Access from outside the LAN requires a private VPN and a certificate trusted by the phone. HTTP/TLS behavior is integration-tested; visual QA on a physical phone remains outstanding.
+
 Continue reading generic M0 scenarios and `chrolo.langgraph.v1`. Write new captures in the new format. Clearly distinguish M1 graph re-execution from M2 offline interaction replay. Provide migration only where semantics are preserved; otherwise explain what old traces cannot recover.
 
 ### Acceptance criteria
@@ -167,6 +203,14 @@ Continue reading generic M0 scenarios and `chrolo.langgraph.v1`. Write new captu
 - Invalid traces and replay failures explain actionable causes without dumping sensitive payloads.
 
 ## Phase 7: Reliability benchmark and release gates
+
+### Current status
+
+`chrolo benchmark` runs offline synthetic cases and compares Chrolo with a naïve single-pass deletion baseline. Its cassette case removes an irrelevant event and prunes the associated tool call from the output cassette, then verifies strict replay of the minimized cassette without live calls. `--dataset` accepts a versioned, user-supplied labeled case dataset and reports reproduction rate, signature preservation, shrink percentage, candidate checks, replay timing, fixture sizes, and optional simulated-fix sensitivity. A bridge to AgentTelemetry's deterministic mock-backed fault-injection harness covers 78 reproducible positive cases over 20 repetitions (1,560/1,560 full-trace replays): every included detector signature reproduced, mean event reduction was 74.23%, all results were 1-minimal under tested cascade deletions, and all 78 paired fault-disabled controls cleared the injected signature. The full 170-row source set regenerates as 78 true positives, 62 false negatives, 0 false positives, and 30 true negatives; the 78 detected cases alone feed minimization. The naïve baseline reached the same mean reduction with fewer checks, so this run demonstrates signal preservation rather than a reduction advantage. The fault-disabled control measures detector sensitivity, not a source-code patch or task-level agent failure reproduction. A local copy of the public MAD/MAST corpus contains trace strings and LLM-generated labels without deterministic runners or failure oracles; it is not a valid minimization benchmark input. A separate SWE-bench Multimodal task-oracle smoke check verified one real test runner and reference-patch sensitivity (3 expected failures plus 30 passing controls on base; all 33 passing with the reference fix), but those tasks do not include agent traces and therefore are not Chrolo minimization cases. The SWE-bench harness returned success even when Jest reported the expected failures, so its test-summary parser—not shell exit status—was used. Provider-specific release claims remain future work.
+
+### Remaining external work
+
+The real-failure comparison cannot be completed responsibly without stable, executable failure oracles and deterministic runners for selected traces. Provider-specific release claims likewise require supported SDK versions and integration fixtures. The LangChain adapter is validated against a fake model only. Keep M2 experimental until those inputs exist.
 
 Build labeled deterministic scenarios for irrelevant event removal, model-dependent and tool-dependent failures, changed requests, unrelated exceptions, mutating tools, redacted/incomplete cassettes, and nondeterminism outside wrapped boundaries.
 
@@ -179,7 +223,7 @@ Do not call M2 ready for real agent traces until replay never silently calls liv
 1. Complete M1 contract and clean-environment verification.
 2. Review and freeze M2 schema and strict matching rules.
 3. Implement the framework-neutral cassette engine with fake boundaries.
-4. Add one model wrapper, one tool wrapper, and LangGraph integration.
+4. Add a buffered LangChain chat wrapper, JSON-argument tool wrapper, and LangGraph integration.
 5. Connect replay to minimization and failure classification.
 6. Add privacy controls, inspection, and compatibility support.
 7. Benchmark reliability and document supported use cases before broadening product claims.
