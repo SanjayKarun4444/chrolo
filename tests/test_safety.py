@@ -298,3 +298,7 @@ def test_web_page_has_responsive_upload_and_sanitization_controls():
     assert "Filter and download" in PAGE
     assert "Scan for likely secrets" in PAGE
     assert "Add to redaction list" in PAGE
+    assert 'id="clearData"' in PAGE
+    assert "trace=null;file.value=''" in PAGE
+    assert "pageGeneration++" in PAGE
+    assert "Page data cleared." in PAGE

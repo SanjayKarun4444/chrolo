@@ -204,7 +204,7 @@ For reviewed, labeled cases, `chrolo benchmark --dataset benchmarks.json` compar
 
 `examples/task_oracle_dataset.json` adds three synthetic executable task failures: routing a ticket to the wrong team, charging an already-paid invoice again, and deleting a protected file. Its runner executes retained tool calls against fresh in-memory task state, resolves explicit outputs from earlier tool calls, and checks an exact task-state failure signature. Run it with `python -m chrolo benchmark --dataset examples/task_oracle_dataset.json --repeat 20`. The fixed runners model a correction and must clear the original signature. These are deterministic reference tasks, not recordings from production agents or external services.
 
-For a mobile-friendly local trace desk, run `chrolo serve` and open the printed address. It can inspect, scan for likely secrets, redact, and filter uploaded JSON traces without executing graph code or saving uploads on the server. To access it from a phone, bind to a trusted private network and use HTTPS with a certificate trusted by your devices:
+For a mobile-friendly local trace desk, run `chrolo serve` and open the printed address. It can inspect, scan for likely secrets, redact, and filter uploaded JSON traces without executing graph code or saving uploads on the server. Selecting a different file clears the previous summary and scan findings; **Clear data from this page** removes the selected file, loaded trace, findings, and path inputs. It also prevents an outstanding response from repopulating cleared results. To access it from a phone, bind to a trusted private network and use HTTPS with a certificate trusted by your devices:
 
 ```bash
 chrolo serve --host 0.0.0.0 --tls-certfile cert.pem --tls-keyfile key.pem
