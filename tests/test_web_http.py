@@ -151,3 +151,37 @@ def test_remote_startup_prints_private_url_and_fixed_basic_auth_username(monkeyp
     assert "Basic auth username: chrolo" in output
     assert "Basic auth password: long-test-password" in output
     assert "TLS is enabled" in output
+
+
+def test_remote_startup_prints_explicit_private_vpn_ip(monkeypatch, capsys):
+    class StubServer:
+        server_address = ("0.0.0.0", 9443)
+
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(web, "_create_server", lambda *args, **kwargs: (StubServer(), "long-test-password"))
+    monkeypatch.setattr(web, "_lan_ipv4_addresses", lambda: ["192.168.1.25"])
+
+    web.serve("0.0.0.0", 9443, advertise_ip="100.71.4.2")
+
+    output = capsys.readouterr().out
+    assert "http://100.71.4.2:9443/" in output
+    assert "http://192.168.1.25:9443/" in output
+
+
+def test_advertise_ip_rejects_public_addresses_before_starting_server(monkeypatch):
+    def should_not_start(*args, **kwargs):
+        raise AssertionError("server should not start for an invalid advertised address")
+
+    monkeypatch.setattr(web, "_create_server", should_not_start)
+    for address in ("8.8.8.8", "127.0.0.1", "169.254.1.2", "2001:db8::1", "not-an-ip"):
+        try:
+            web.serve("0.0.0.0", 8765, advertise_ip=address)
+        except ValueError as exc:
+            assert "private or VPN IPv4" in str(exc)
+        else:
+            raise AssertionError(f"accepted invalid advertised IP {address!r}")

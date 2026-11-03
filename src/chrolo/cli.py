@@ -159,7 +159,10 @@ def benchmark_cmd(args):
 
 
 def serve_cmd(args):
-    serve_web(args.host, args.port, args.password, args.tls_certfile, args.tls_keyfile)
+    serve_web(
+        args.host, args.port, args.password, args.tls_certfile, args.tls_keyfile,
+        advertise_ip=args.advertise_ip,
+    )
 
 
 def infer_dependencies_cmd(args):
@@ -391,6 +394,10 @@ def main():
     serve.add_argument("--password", help="Optional Basic auth password; remote binds generate one if omitted")
     serve.add_argument("--tls-certfile", help="PEM TLS certificate chain for HTTPS")
     serve.add_argument("--tls-keyfile", help="PEM TLS private key for HTTPS; provide with --tls-certfile")
+    serve.add_argument(
+        "--advertise-ip",
+        help="Also print this private or VPN IPv4 URL for phone access when auto-discovery misses it",
+    )
     serve.set_defaults(handler=serve_cmd)
     infer = command.add_parser("infer-dependencies", help="Infer and verify stateful event dependencies")
     infer.add_argument("scenario", type=Path)

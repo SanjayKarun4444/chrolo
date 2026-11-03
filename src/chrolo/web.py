@@ -115,6 +115,23 @@ def _lan_ipv4_addresses() -> list[str]:
     return sorted(addresses)
 
 
+def _validate_advertise_ip(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("advertise_ip must be a private or VPN IPv4 address")
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        raise ValueError("advertise_ip must be a private or VPN IPv4 address") from None
+    if (
+        address.version != 4
+        or not (address.is_private or address in _CGNAT_IPV4)
+        or address.is_loopback
+        or address.is_link_local
+    ):
+        raise ValueError("advertise_ip must be a private or VPN IPv4 address")
+    return str(address)
+
+
 def _create_server(
     host: str = "127.0.0.1",
     port: int = 8765,
@@ -207,8 +224,11 @@ def serve(
     password: str | None = None,
     tls_certfile: str | None = None,
     tls_keyfile: str | None = None,
+    advertise_ip: str | None = None,
 ) -> None:
     """Serve the trace desk; non-loopback access requires Basic authentication."""
+    if advertise_ip is not None:
+        advertise_ip = _validate_advertise_ip(advertise_ip)
     server, password = _create_server(host, port, password, tls_certfile, tls_keyfile)
     actual_host, actual_port = server.server_address[:2]
     scheme = "https" if tls_certfile is not None else "http"
@@ -217,6 +237,8 @@ def serve(
         if not _is_loopback(host):
             if host in {"0.0.0.0", "::"}:
                 addresses = _lan_ipv4_addresses()
+                if advertise_ip is not None:
+                    addresses = sorted(set(addresses) | {advertise_ip})
                 if addresses:
                     print("On another device on this private network or VPN, open:")
                     for address in addresses:
