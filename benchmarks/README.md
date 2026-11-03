@@ -49,6 +49,12 @@ The local SWE-bench Multimodal task shards contain runnable test scripts and Doc
 
 Real-world minimization scores still require runners that can deterministically re-execute selected real traces with stable task-level failure oracles.
 
+## OpenHands isolated action runner (not yet validated on a task image)
+
+`chrolo.openhands.extract_actions` converts a row from the OpenHands trajectory corpus into ordered Chrolo events. `OpenHandsDockerRunner` starts a new container for each candidate with networking disabled, no host bind mounts, dropped capabilities, no-new-privileges, and CPU, memory, PID, per-action, test, and overall time limits. It executes the recorded Bash commands and the sample's `view`, `create`, and `str_replace` editor operations, then reports test statuses from the configured pytest command. A runner timeout removes its named container. The paired `failure_oracle` requires the same observed set of failing `FAIL_TO_PASS` tests and passing `PASS_TO_PASS` controls.
+
+This runner has unit coverage with a mocked Docker CLI and a syntax check for its in-container helper. It has **not** been run against the SWE-rebench image, and the generic `chrolo benchmark --dataset` workflow is not yet wired to its configuration. `insert` and `undo_edit` editor calls are rejected explicitly. Keep real-agent reliability claims open until the runner is integrated into an executable benchmark workflow and its behavior is validated inside the published task image. Docker was left stopped at the user's request.
+
 ## AgentFailureBench paired trace-difference integration
 
 The [AgentFailureBench dataset](https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench) supplies synthetic failed and corrected tool trajectories. Chrolo's builder includes only records with an exact tool-call or tool-output difference, then treats the recorded difference as a witness. It replays those recorded observations and does not execute tools, recreate an environment, or establish task success/failure independently. The upstream dataset describes its traces as procedurally generated and documents the corresponding limitations in [`LIMITATIONS.md`](https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench/blob/main/LIMITATIONS.md).
