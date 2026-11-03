@@ -20,14 +20,15 @@ PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><title>Chrolo Trace Desk</title>
 <style>
-:root{font:16px/1.5 system-ui,sans-serif;color-scheme:light dark;--card:Canvas;--line:color-mix(in srgb,CanvasText 18%,transparent)}
+:root{font:16px/1.5 system-ui,sans-serif;color-scheme:light dark;--card:Canvas;--line:color-mix(in srgb,CanvasText 18%,transparent);--tap-size:44px}
 *{box-sizing:border-box}body{margin:0;background:color-mix(in srgb,Canvas 94%,#6484d8);color:CanvasText}
 main{max-width:760px;margin:auto;padding:24px 16px 48px}h1{font-size:1.7rem;margin:.2rem 0}.sub{opacity:.75;margin:0 0 22px}
 section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 3px 16px #0000000b}
-label{font-weight:650;display:block;margin:12px 0 5px}input,textarea,button{font:inherit;width:100%;border-radius:9px;border:1px solid var(--line);padding:11px;background:Canvas;color:CanvasText}
+label{font-weight:650;display:block;margin:12px 0 5px}input,textarea,button{font:inherit;width:100%;min-height:var(--tap-size);border-radius:9px;border:1px solid var(--line);padding:11px;background:Canvas;color:CanvasText}
 textarea{min-height:84px;resize:vertical}input[type=file]{padding:9px}button{background:#4868c7;color:white;border:0;font-weight:700;margin-top:12px;cursor:pointer}button.secondary{background:color-mix(in srgb,CanvasText 12%,Canvas);color:CanvasText}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.note{font-size:.88rem;opacity:.8}.status{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:12px}.result{display:none}.badge{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:2px 10px;margin:3px;font-size:.85rem}.finding{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}.finding span{overflow-wrap:anywhere}.finding button{width:auto;margin:0}
-@media(max-width:560px){main{padding:18px 12px 32px}section{padding:15px}.row{grid-template-columns:1fr}}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #8ca7ff;outline-offset:2px}
+@media(max-width:560px){main{padding:calc(18px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))}section{padding:15px}.row{grid-template-columns:1fr}.finding button{min-height:var(--tap-size);width:100%}}
 </style></head><body><main>
 <h1>Chrolo Trace Desk</h1><p class="sub">Inspect and sanitize a trace on this device. Trace contents are not saved by the server.</p>
 <section><label for="trace">Choose a JSON trace</label><input id="trace" type="file" accept="application/json,.json">

@@ -302,3 +302,7 @@ def test_web_page_has_responsive_upload_and_sanitization_controls():
     assert "trace=null;file.value=''" in PAGE
     assert "pageGeneration++" in PAGE
     assert "Page data cleared." in PAGE
+    assert "--tap-size:44px" in PAGE
+    assert "min-height:var(--tap-size)" in PAGE
+    assert "env(safe-area-inset-bottom)" in PAGE
+    assert "button:focus-visible" in PAGE
