@@ -14,6 +14,7 @@ license = {text = "MIT"}
 dev = ["pytest>=8,<10"]
 langgraph = ["langgraph>=1.0,<2"]
 langchain = ["langchain-core>=1.0,<2"]
+openai = ["openai>=1.66,<3"]
 
 [project.scripts]
 chrolo = "chrolo.cli:main"

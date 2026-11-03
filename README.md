@@ -143,6 +143,28 @@ replay.finish()  # verifies every recorded interaction was consumed
 
 `BoundaryTool(function, boundaries, "module.tool", context={"node": "search"})` provides the same explicit boundary for a JSON-argument tool; replay returns the recorded value without calling `function`. An optional buffered LangChain chat adapter is available with `pip install -e '.[langchain]'`. Wrap the model with `BoundaryChatModel(model, boundaries, "provider:model-version", context={"node": "planner"})` and call `.invoke(messages, **kwargs)`. Record with `BoundaryContext.recording(recorder)` and replay with `BoundaryContext.replaying(session)`. The adapter preserves LangChain messages and generation metadata in the cassette; streaming is not supported. Only calls made through these wrappers are captured.
 
+For the official OpenAI Python SDK, the optional `BoundaryOpenAIResponses` wrapper supports buffered synchronous `client.responses.create(...)` calls. Install it with `pip install -e '.[openai]'`. It records a JSON representation of the full response, including output/tool items, and exposes `result.output_text` in both record and replay modes. It returns Chrolo's `OpenAIResponsesResult` instead of the SDK's typed response; inspect `result.response` for the normalized API fields. Streaming and async requests are unsupported by this adapter. See the [OpenAI Python SDK reference](https://developers.openai.com/api/reference/python) for the underlying Responses call shape.
+
+```python
+from openai import OpenAI
+
+from chrolo.cassette import BoundaryContext, CassetteRecorder
+from chrolo.openai_adapter import BoundaryOpenAIResponses
+
+client = OpenAI()
+recorder = CassetteRecorder()
+model = BoundaryOpenAIResponses(
+    client,
+    BoundaryContext.recording(recorder),
+    "openai:responses:my-model",
+)
+result = model.create(model="my-model", input="...", store=False)
+text = result.output_text
+trace = recorder.to_dict()
+```
+
+OpenAI prompts and responses may contain sensitive data; apply Chrolo's trace review and redaction controls before sharing cassettes. Replay uses recorded output and has no provider fallback.
+
 Recording invokes the supplied callable and may therefore perform live calls or side effects. Replay accepts no callable and never invokes a provider or tool. Trace payloads may contain confidential data. Use `chrolo inspect trace.json` for a payload-free summary, or redact selected JSON Pointer paths before sharing:
 
 ```bash

@@ -190,7 +190,7 @@ Keep `minimize` backward compatible. Candidate commands/workflows are `capture`,
 
 `chrolo replay` and `chrolo minimize` label cassette-backed replay versus input-only graph re-execution, offer an optional replay failure oracle, hide recorded provider error text, and require `--allow-live-side-effects` before input-only graph code can be re-executed. `capture --capture-exceptions` opts into the versioned v2 capture with a privacy-preserving exception-class outcome so callers can replay and minimize exception failures without storing message or stack text; v1 capture behavior remains the default.
 
-An optional LangChain `BaseChatModel` wrapper routes buffered `.invoke()` calls through the cassette boundary. The reusable `BoundaryTool` wraps JSON-argument tools and proves replay avoids its live side effect. Fake-model tests cover offline replay, request mismatch, and recorded provider errors; the LangGraph integration test covers both model and tool calls together. Streaming and provider-specific SDK guarantees are not supported.
+An optional LangChain `BaseChatModel` wrapper routes buffered `.invoke()` calls through the cassette boundary. The reusable `BoundaryTool` wraps JSON-argument tools and proves replay avoids its live side effect. `BoundaryOpenAIResponses` now wraps buffered synchronous calls to the official OpenAI Responses API, records a JSON-safe response envelope, and returns the same Chrolo result type on replay. Its tests cover real SDK response serialization, offline replay, request mismatch, recorded errors, and streaming rejection. It does not return the SDK's typed response and does not support async or streaming; calls outside the wrapper remain uncaptured. The LangGraph integration test covers LangChain model and tool calls together.
 
 `chrolo serve` provides a responsive, in-memory trace desk for inspect/scan/redact/filter operations. Scan results expose only paths and can be added to the redaction list with one tap. Loopback is the default; remote binding requires Basic authentication. For all-interface binds, startup lists discoverable private IPv4 URLs and prints the required username and password. Optional HTTPS accepts a user-supplied PEM certificate and key; without TLS, remote credentials and uploads are unencrypted at the app layer and the server warns at startup. Access from outside the LAN requires a private VPN and a certificate trusted by the phone. HTTP/TLS behavior is integration-tested; visual QA on a physical phone remains outstanding.
 
@@ -216,7 +216,7 @@ A local copy of the public MAD/MAST corpus contains trace strings and LLM-genera
 
 ### Remaining external work
 
-The real-failure comparison cannot be completed responsibly without stable, executable failure oracles and deterministic runners for selected traces. Provider-specific release claims likewise require supported SDK versions and integration fixtures. The LangChain adapter is validated against a fake model only. Keep M2 experimental until those inputs exist.
+The real-failure comparison cannot be completed responsibly without stable, executable failure oracles and deterministic runners for selected traces. The OpenAI adapter currently has a synchronous Responses API scope; Chat Completions, async, streaming, realtime, and other providers need their own adapters and integration fixtures. The LangChain adapter is validated against a fake model only. Keep M2 experimental until supported combinations are precisely documented and verified.
 
 Build labeled deterministic scenarios for irrelevant event removal, model-dependent and tool-dependent failures, changed requests, unrelated exceptions, mutating tools, redacted/incomplete cassettes, and nondeterminism outside wrapped boundaries.
 
@@ -229,7 +229,7 @@ Do not call M2 ready for real agent traces until replay never silently calls liv
 1. Complete M1 contract and clean-environment verification.
 2. Review and freeze M2 schema and strict matching rules.
 3. Implement the framework-neutral cassette engine with fake boundaries.
-4. Add a buffered LangChain chat wrapper, JSON-argument tool wrapper, and LangGraph integration.
+4. Add a buffered LangChain chat wrapper, JSON-argument tool wrapper, synchronous OpenAI Responses adapter, and LangGraph integration.
 5. Connect replay to minimization and failure classification.
 6. Add privacy controls, inspection, and compatibility support.
 7. Benchmark reliability and document supported use cases before broadening product claims.
