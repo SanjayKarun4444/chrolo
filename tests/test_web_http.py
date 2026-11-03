@@ -129,6 +129,8 @@ def test_lan_address_discovery_includes_cgnat_vpn_and_filters_other_addresses(mo
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.71.4.2", 0)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.63.255.254", 0)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.128.0.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("0.0.0.0", 0)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
         ],
     )
@@ -183,7 +185,10 @@ def test_advertise_ip_rejects_public_addresses_before_starting_server(monkeypatc
         raise AssertionError("server should not start for an invalid advertised address")
 
     monkeypatch.setattr(web, "_create_server", should_not_start)
-    for address in ("8.8.8.8", "127.0.0.1", "169.254.1.2", "2001:db8::1", "not-an-ip"):
+    for address in (
+        "8.8.8.8", "127.0.0.1", "169.254.1.2", "0.0.0.0", "192.0.2.1",
+        "224.0.0.1", "2001:db8::1", "not-an-ip",
+    ):
         try:
             web.serve("0.0.0.0", 8765, advertise_ip=address)
         except ValueError as exc:

@@ -16,6 +16,7 @@ from .safety import filter_trace, redact_trace, scan_trace, summarize_trace
 
 MAX_UPLOAD_BYTES = 11 * 1024 * 1024
 _CGNAT_IPV4 = ipaddress.ip_network("100.64.0.0/10")
+_PRIVATE_IPV4 = tuple(map(ipaddress.ip_network, ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")))
 
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -106,13 +107,20 @@ def _lan_ipv4_addresses() -> list[str]:
     addresses = set()
     for entry in entries:
         address = ipaddress.ip_address(entry[4][0])
-        if (
-            (address.is_private or address in _CGNAT_IPV4)
-            and not address.is_loopback
-            and not address.is_link_local
-        ):
+        if _is_private_or_vpn_ipv4(address):
             addresses.add(str(address))
     return sorted(addresses)
+
+
+def _is_private_or_vpn_ipv4(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        address.version == 4
+        and (address in _CGNAT_IPV4 or any(address in network for network in _PRIVATE_IPV4))
+        and not address.is_loopback
+        and not address.is_link_local
+        and not address.is_unspecified
+        and not address.is_multicast
+    )
 
 
 def _validate_advertise_ip(value: str) -> str:
@@ -122,12 +130,7 @@ def _validate_advertise_ip(value: str) -> str:
         address = ipaddress.ip_address(value)
     except ValueError:
         raise ValueError("advertise_ip must be a private or VPN IPv4 address") from None
-    if (
-        address.version != 4
-        or not (address.is_private or address in _CGNAT_IPV4)
-        or address.is_loopback
-        or address.is_link_local
-    ):
+    if not _is_private_or_vpn_ipv4(address):
         raise ValueError("advertise_ip must be a private or VPN IPv4 address")
     return str(address)
 
