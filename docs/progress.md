@@ -2,9 +2,9 @@
 
 Checkpoint: 2026-11-03
 
-Latest local change after this checkpoint: Trace Desk mobile usability now honors device safe-area insets, gives controls a 44px minimum touch target, and adds visible keyboard focus styling. The page-level static test covers these guarantees. Full suite: 104 passed.
+Latest local changes after this checkpoint: Trace Desk mobile usability now honors device safe-area insets, gives controls a 44px minimum touch target, and adds visible keyboard focus styling. The README roadmap summary now reflects the current OpenAI adapters, AgentFailureBench, synthetic task-oracle evidence, and mobile UI. The page-level static test covers the mobile guarantees; full suite: 104 passed.
 
-This note preserves the current state and resume point for the Chrolo roadmap. The main feature set and documentation were committed and pushed to `origin/master` in commits `a784787`, `2cf587e`, and `b84e478`. The AgentFailureBench, OpenAI adapter, executable synthetic task-oracle, and Trace Desk privacy milestones are committed locally on `master`, six commits ahead of `origin/master`. The last push failed because GitHub returned `Repository not found` for the configured origin `https://github.com/SanjayKarun4444/chrolo.git`; the intended remote URL needs confirmation before retrying.
+This note preserves the current state and resume point for the Chrolo roadmap. The main feature set and documentation were committed and pushed to `origin/master` in commits `a784787`, `2cf587e`, and `b84e478`. The AgentFailureBench, OpenAI adapter, executable synthetic task-oracle, Trace Desk privacy, and mobile usability milestones are committed locally on `master`, seven commits ahead of `origin/master`. The last push failed because GitHub returned `Repository not found` for the configured origin `https://github.com/SanjayKarun4444/chrolo.git`; the intended remote URL needs confirmation before retrying.
 
 ## Implemented and verified
 
