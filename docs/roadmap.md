@@ -218,7 +218,9 @@ A local copy of the public MAD/MAST corpus contains trace strings and LLM-genera
 
 ### Remaining external work
 
-The remaining task-level comparison needs permissioned traces from actual agent runs and stable runners for their real tasks. AgentFailureBench provides synthetic paired tool traces, and AgentTelemetry provides a deterministic fault-injection runner; neither substitutes for real-agent task executions. The SWE-bench smoke validates one environment and reference-fix oracle but has no paired agent trajectory. Keep the real-agent reliability score open until trace provenance, runner repeatability, and an executable failure oracle are available together.
+**Candidate corpus found; execution not yet validated.** The [SWE-rebench OpenHands trajectories](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories) corpus is CC BY 4.0 and documents 67,074 OpenHands v0.54 runs on real GitHub issues, with recorded `resolved` outcomes and task IDs that join to [SWE-rebench](https://huggingface.co/datasets/nebius/SWE-rebench) task images and test metadata. A local metadata join verified the unresolved `PlasmaFAIR__sdf-xarray-24` trajectory against image `swerebench/sweb.eval.x86_64.plasmafair_1776_sdf-xarray-24`, eight `FAIL_TO_PASS` tests, two `PASS_TO_PASS` controls, and the task repository's BSD-3-Clause license. The trace has 185 messages and 92 tool calls (44 Bash, 44 file-editor, 3 think, 1 finish). This is a concrete real-agent/task-oracle candidate, not yet a Chrolo result: we have not re-executed its recorded actions in the isolated task image or measured a minimized trace. Docker is currently stopped and the user asked to leave it blocked, so do not run the task until that constraint changes.
+
+AgentFailureBench provides synthetic paired tool traces, and AgentTelemetry provides a deterministic fault-injection runner; neither substitutes for execution of this real-agent candidate. Keep the real-agent reliability score open until clean-container action replay, the test oracle, and repeated minimization are run together.
 
 The provider adapters currently cover buffered synchronous OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages calls. They preserve JSON response envelopes and tool-call data, return Chrolo result objects, and explicitly reject streaming and async calls. Real SDK response fixtures run in the GitHub Actions matrix after installing the provider extras. The LangChain wrapper is validated with a fake model and the LangGraph integration test. Realtime, other provider SDKs, SDK-typed response reconstruction, and unwrapped side effects remain unsupported; keep M2 experimental.
 
@@ -228,8 +230,8 @@ Phone visual QA remains outstanding. HTTP/TLS integration tests and responsive-l
 
 ## Remaining delivery order
 
-1. Obtain permissioned real-agent traces paired with deterministic task runners and executable failure oracles.
-2. Run repeated minimization and paired-fix controls on that corpus; keep the results separate from synthetic and recorded-trace differential scores.
+1. Implement a bounded, isolated action replayer for the SWE-rebench OpenHands format and validate it against a failed trace plus the joined Docker image's `FAIL_TO_PASS`/`PASS_TO_PASS` tests.
+2. Run repeated minimization and a verified fix intervention on that corpus; keep the results separate from synthetic and recorded-trace differential scores.
 3. Complete the Trace Desk phone visual check through a permitted preview route, including the remote TLS/VPN setup.
 4. Publish the local commits to the confirmed repository so the corrected CI workflow executes on its Python matrix.
 5. Reassess M2's experimental status after provider, framework, and real-agent runner coverage has evidence at the required scope.
