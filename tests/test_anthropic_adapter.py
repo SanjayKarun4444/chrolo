@@ -104,3 +104,43 @@ def test_anthropic_recorded_error_replays_without_calling_sdk():
             sdk_version="test-sdk",
         ).create(model="stable-model", max_tokens=128, messages=[])
     assert client.messages.calls == []
+
+
+def test_anthropic_sdk_message_serializes_tool_use_and_replays_offline():
+    anthropic = pytest.importorskip("anthropic")
+    from anthropic.types import Message
+
+    response = Message.model_validate({
+        "id": "msg_123",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-sonnet-test",
+        "content": [
+            {"type": "text", "text": "Looking up the ticket."},
+            {"type": "tool_use", "id": "toolu_123", "name": "lookup_ticket", "input": {"ticket_id": "T-1"}},
+        ],
+        "stop_reason": "tool_use",
+        "stop_sequence": None,
+        "usage": {"input_tokens": 12, "output_tokens": 9},
+    })
+    live_client = FakeClient(result=response)
+    recorder = CassetteRecorder()
+    recorded = BoundaryAnthropicMessages(
+        live_client,
+        BoundaryContext.recording(recorder),
+        "anthropic:messages:claude-sonnet-test",
+        sdk_version=anthropic.__version__,
+    ).create(model="claude-sonnet-test", max_tokens=128, messages=[])
+
+    offline_client = FakeClient()
+    replayed = BoundaryAnthropicMessages(
+        offline_client,
+        BoundaryContext.replaying(ReplaySession.from_dict(recorder.to_dict())),
+        "anthropic:messages:claude-sonnet-test",
+        sdk_version=anthropic.__version__,
+    ).create(model="claude-sonnet-test", max_tokens=128, messages=[])
+    assert replayed == recorded
+    assert replayed.response == response.to_dict(mode="json")
+    assert replayed.output_text == "Looking up the ticket."
+    assert replayed.response["content"][1]["input"] == {"ticket_id": "T-1"}
+    assert offline_client.messages.calls == []
