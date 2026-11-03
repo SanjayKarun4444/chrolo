@@ -230,7 +230,7 @@ Phone visual QA remains outstanding. HTTP/TLS integration tests and responsive-l
 
 ## Remaining delivery order
 
-1. Implement a bounded, isolated action replayer for the SWE-rebench OpenHands format and validate it against a failed trace plus the joined Docker image's `FAIL_TO_PASS`/`PASS_TO_PASS` tests.
+1. Implement a bounded, isolated action replayer for the extracted SWE-rebench OpenHands actions, then validate it against the joined Docker image's `FAIL_TO_PASS`/`PASS_TO_PASS` tests. The data-only extractor is covered by focused parser tests; runtime replay is still pending.
 2. Run repeated minimization and a verified fix intervention on that corpus; keep the results separate from synthetic and recorded-trace differential scores.
 3. Complete the Trace Desk phone visual check through a permitted preview route, including the remote TLS/VPN setup.
 4. Publish the local commits to the confirmed repository so the corrected CI workflow executes on its Python matrix.
