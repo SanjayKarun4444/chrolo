@@ -150,6 +150,7 @@ def test_capture_replay_and_minimize_exception_failure_without_serializing_messa
 
 def test_capture_records_explicit_provenance_and_inspect_hides_fingerprint_values(tmp_path):
     capture = tmp_path / "provenance.json"
+    minimal = tmp_path / "provenance-minimal.json"
     source = ROOT / "examples" / "failing_graph_input.json"
     result = _cli(
         "capture", "--graph", "examples.failing_graph:build_graph",
@@ -170,6 +171,21 @@ def test_capture_records_explicit_provenance_and_inspect_hides_fingerprint_value
     summary = json.loads(inspected.stdout)
     assert summary["capture_provenance"]["environment_fingerprints"] == ["python", "region"]
     assert "test-region" not in inspected.stdout
+
+    replay = _cli(
+        "replay", capture, "--allow-live-side-effects",
+        "--oracle", "examples.failing_graph:original_failure",
+    )
+    assert replay.returncode == 0, replay.stderr
+    minimized = _cli(
+        "minimize", capture, "--allow-live-side-effects",
+        "--oracle", "examples.failing_graph:original_failure",
+        "--output", minimal, "--test", tmp_path / "test_provenance_regression.py",
+    )
+    assert minimized.returncode == 0, minimized.stderr
+    reduced = json.loads(minimal.read_text(encoding="utf-8"))
+    assert reduced["format"] == PROVENANCE_CAPTURE_FORMAT
+    assert reduced["provenance"] == saved["provenance"]
 
 
 def test_capture_provenance_validation_rejects_malformed_values():
