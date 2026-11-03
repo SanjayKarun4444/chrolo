@@ -7,6 +7,7 @@ reconstruction are intentionally unsupported.
 from __future__ import annotations
 
 import json
+import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -87,7 +88,13 @@ class BoundaryAnthropicMessages:
             raise ValueError("streaming is not supported by BoundaryAnthropicMessages")
 
         def live() -> dict[str, Any]:
-            response, output_text = self._response_data(self.client.messages.create(**request))
+            sdk_response = self.client.messages.create(**request)
+            if inspect.isawaitable(sdk_response):
+                close = getattr(sdk_response, "close", None)
+                if callable(close):
+                    close()
+                raise TypeError("async calls are not supported by BoundaryAnthropicMessages")
+            response, output_text = self._response_data(sdk_response)
             return {"response": response, "output_text": output_text}
 
         recorded = self.boundaries.call("model", self.target, request, live, context=self.context)

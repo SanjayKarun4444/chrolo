@@ -7,12 +7,22 @@ streaming, asynchronous calls, or reconstruction of the SDK's typed response.
 from __future__ import annotations
 
 import json
+import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from .cassette import BoundaryContext
+
+
+def _require_sync_response(response: Any, label: str) -> Any:
+    if inspect.isawaitable(response):
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+        raise TypeError(f"async calls are not supported by {label}")
+    return response
 
 
 @dataclass(frozen=True)
@@ -88,7 +98,9 @@ class BoundaryOpenAIResponses:
             raise ValueError("streaming is not supported by BoundaryOpenAIResponses")
 
         def live() -> dict[str, Any]:
-            sdk_response = self.client.responses.create(**request)
+            sdk_response = _require_sync_response(
+                self.client.responses.create(**request), "BoundaryOpenAIResponses"
+            )
             response_data, output_text = self._response_data(sdk_response)
             return {"response": response_data, "output_text": output_text}
 
@@ -156,7 +168,9 @@ class BoundaryOpenAIChatCompletions:
             raise ValueError("streaming is not supported by BoundaryOpenAIChatCompletions")
 
         def live() -> dict[str, Any]:
-            sdk_response = self.client.chat.completions.create(**request)
+            sdk_response = _require_sync_response(
+                self.client.chat.completions.create(**request), "BoundaryOpenAIChatCompletions"
+            )
             response_data, _ = BoundaryOpenAIResponses._response_data(sdk_response)
             output_text = None
             choices = response_data.get("choices")

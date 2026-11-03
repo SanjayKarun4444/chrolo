@@ -140,6 +140,19 @@ def test_streaming_is_rejected_before_live_call():
     assert client.responses.calls == []
 
 
+def test_async_responses_client_fails_clearly_without_unawaited_coroutine():
+    class AsyncResponses:
+        async def create(self, **request):
+            return FakeResponse()
+
+    client = type("AsyncClient", (), {"responses": AsyncResponses()})()
+    model = BoundaryOpenAIResponses(
+        client, BoundaryContext.recording(CassetteRecorder()), "openai:model", sdk_version="test-sdk"
+    )
+    with pytest.raises(TypeError, match="async calls are not supported"):
+        model.create(model="stable-model", input="hello")
+
+
 def test_json_incompatible_response_is_rejected_during_recording():
     client = FakeClient(result={"id": "bad", "value": object()})
     model = BoundaryOpenAIResponses(
@@ -227,6 +240,19 @@ def test_chat_completions_reject_streaming_without_live_call():
     with pytest.raises(ValueError, match="streaming is not supported"):
         model.create(model="stable-model", messages=[], stream=True)
     assert client.chat.completions.calls == []
+
+
+def test_async_chat_client_fails_clearly_without_unawaited_coroutine():
+    class AsyncCompletions:
+        async def create(self, **request):
+            return FakeChatResponse()
+
+    client = type("AsyncClient", (), {"chat": type("Chat", (), {"completions": AsyncCompletions()})()})()
+    model = BoundaryOpenAIChatCompletions(
+        client, BoundaryContext.recording(CassetteRecorder()), "openai:chat", sdk_version="test-sdk"
+    )
+    with pytest.raises(TypeError, match="async calls are not supported"):
+        model.create(model="stable-model", messages=[])
 
 
 def test_openai_sdk_chat_completion_serializes_and_replays_tool_calls():

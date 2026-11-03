@@ -86,6 +86,19 @@ def test_anthropic_streaming_rejected_before_live_call():
     assert client.messages.calls == []
 
 
+def test_anthropic_async_client_fails_clearly_without_unawaited_coroutine():
+    class AsyncMessages:
+        async def create(self, **request):
+            return FakeMessage()
+
+    client = type("AsyncClient", (), {"messages": AsyncMessages()})()
+    model = BoundaryAnthropicMessages(
+        client, BoundaryContext.recording(CassetteRecorder()), "anthropic:model", sdk_version="test-sdk"
+    )
+    with pytest.raises(TypeError, match="async calls are not supported"):
+        model.create(model="stable-model", max_tokens=128, messages=[])
+
+
 def test_anthropic_recorded_error_replays_without_calling_sdk():
     recorder = CassetteRecorder()
     with pytest.raises(RuntimeError, match="provider error"):
