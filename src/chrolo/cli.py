@@ -16,6 +16,7 @@ from .adapters_langgraph import (
     validate_capture,
     FORMAT,
     OUTCOME_CAPTURE_FORMAT,
+    PROVENANCE_CAPTURE_FORMAT,
 )
 from .cassette import RecordedCallError, ReplayMismatch
 from .benchmark import run_benchmarks, run_dataset
@@ -60,6 +61,19 @@ def _read_events(source: dict[str, Any], source_name: str) -> list[Event]:
     return parse_events(source["events"])
 
 
+def _parse_fingerprints(entries: list[str]) -> dict[str, str]:
+    fingerprints = {}
+    for entry in entries:
+        name, separator, value = entry.partition("=")
+        if not separator or not name.strip() or not value:
+            raise ValueError("--fingerprint must use NAME=VALUE with a non-empty name and value")
+        name = name.strip()
+        if name in fingerprints:
+            raise ValueError(f"Duplicate environment fingerprint: {name}")
+        fingerprints[name] = value
+    return fingerprints
+
+
 def capture_cmd(args):
     source = _read_json(args.input)
     initial_state = source.get("initial_state", {})
@@ -72,6 +86,8 @@ def capture_cmd(args):
         record_interactions=args.record_interactions,
         include_snapshots=args.include_snapshots,
         capture_exceptions=args.capture_exceptions,
+        project={k: v for k, v in (("name", args.project_name), ("commit", args.project_commit)) if v is not None},
+        fingerprints=_parse_fingerprints(args.fingerprint),
     )
     if args.include_path or args.exclude_path:
         recorded = filter_trace(
@@ -167,7 +183,7 @@ def serve_cmd(args):
 
 def infer_dependencies_cmd(args):
     capture = _read_json(args.scenario)
-    if capture.get("format") in (FORMAT, OUTCOME_CAPTURE_FORMAT):
+    if capture.get("format") in (FORMAT, OUTCOME_CAPTURE_FORMAT, PROVENANCE_CAPTURE_FORMAT):
         raise ValueError("Dependency inference currently accepts generic event trajectories, not LangGraph captures")
     initial_state = capture.get("initial_state", {})
     if not isinstance(initial_state, dict):
@@ -219,7 +235,7 @@ def _generate_test(args, path: Path, *, graph_mode: bool, fixture_path: Path):
 
 def minimize_cmd(args):
     capture = _read_json(args.scenario)
-    graph_mode = capture.get("format") in (FORMAT, OUTCOME_CAPTURE_FORMAT)
+    graph_mode = capture.get("format") in (FORMAT, OUTCOME_CAPTURE_FORMAT, PROVENANCE_CAPTURE_FORMAT)
     cassette_mode = graph_mode and capture.get("interactions") is not None
     last_candidate_replay: tuple[tuple[str, ...], list[dict[str, Any]]] | None = None
     last_successful_replay: tuple[tuple[str, ...], list[dict[str, Any]]] | None = None
@@ -344,6 +360,9 @@ def main():
     cap.add_argument("--input", required=True, type=Path, help="JSON with initial_state and events")
     cap.add_argument("--output", default=Path("trace.json"), type=Path)
     cap.add_argument("--event-key", default="events")
+    cap.add_argument("--project-name", help="Optional project name to record in provenance")
+    cap.add_argument("--project-commit", help="Optional source revision to record in provenance")
+    cap.add_argument("--fingerprint", action="append", default=[], metavar="NAME=VALUE", help="Explicit environment fingerprint (repeatable; values are stored verbatim)")
     cap.add_argument(
         "--include-snapshots", action="store_true",
         help="Store full per-step graph state snapshots (may contain sensitive data)",

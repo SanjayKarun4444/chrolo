@@ -23,6 +23,7 @@ from .cassette import (
 
 FORMAT = "chrolo.langgraph.v1"
 OUTCOME_CAPTURE_FORMAT = "chrolo.langgraph.v2"
+PROVENANCE_CAPTURE_FORMAT = "chrolo.langgraph.v3"
 OUTCOME_FORMAT = "chrolo.outcome.v1"
 
 
@@ -100,6 +101,8 @@ def capture_graph(
     record_interactions: bool = False,
     include_snapshots: bool = False,
     capture_exceptions: bool = False,
+    project: Mapping[str, str] | None = None,
+    fingerprints: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run a graph once and record its initial event fixture.
 
@@ -146,8 +149,9 @@ def capture_graph(
             raise ValueError("Graph returned no state snapshots")
         if capture_exceptions:
             outcome = {"format": OUTCOME_FORMAT, "status": "success"}
+    has_provenance = bool(project or fingerprints)
     capture = {
-        "format": OUTCOME_CAPTURE_FORMAT if capture_exceptions else FORMAT,
+        "format": PROVENANCE_CAPTURE_FORMAT if has_provenance else (OUTCOME_CAPTURE_FORMAT if capture_exceptions else FORMAT),
         "graph": graph_target,
         "event_key": event_key,
         "initial_state": copy.deepcopy(dict(initial_state)),
@@ -160,6 +164,16 @@ def capture_graph(
         capture["observations"] = observations
     if outcome is not None:
         capture["outcome"] = outcome
+    if has_provenance:
+        try:
+            chrolo_version = version("chrolo-starter")
+        except PackageNotFoundError:
+            chrolo_version = "unknown"
+        capture["provenance"] = {
+            "chrolo_version": chrolo_version,
+            "project": dict(project or {}),
+            "environment_fingerprints": dict(fingerprints or {}),
+        }
     if recorder is not None:
         capture["interactions"] = recorder.to_dict()
     return capture
@@ -167,8 +181,8 @@ def capture_graph(
 
 def validate_capture(data: Mapping[str, Any]) -> list[Event]:
     capture_format = data.get("format")
-    if not isinstance(capture_format, str) or capture_format not in (FORMAT, OUTCOME_CAPTURE_FORMAT):
-        raise ValueError(f"Unsupported capture format; expected {FORMAT} or {OUTCOME_CAPTURE_FORMAT}")
+    if not isinstance(capture_format, str) or capture_format not in (FORMAT, OUTCOME_CAPTURE_FORMAT, PROVENANCE_CAPTURE_FORMAT):
+        raise ValueError(f"Unsupported capture format; expected {FORMAT}, {OUTCOME_CAPTURE_FORMAT}, or {PROVENANCE_CAPTURE_FORMAT}")
     if not isinstance(data.get("initial_state"), dict):
         raise ValueError("Capture initial_state must be a JSON object")
     if not isinstance(data.get("graph"), str) or ":" not in data["graph"]:
@@ -193,6 +207,21 @@ def validate_capture(data: Mapping[str, Any]) -> list[Event]:
         raise ValueError(f"Capture format {FORMAT} does not support an outcome; use {OUTCOME_CAPTURE_FORMAT}")
     if capture_format == OUTCOME_CAPTURE_FORMAT and "outcome" not in data:
         raise ValueError(f"Capture format {OUTCOME_CAPTURE_FORMAT} requires an outcome")
+    if capture_format == PROVENANCE_CAPTURE_FORMAT:
+        provenance = data.get("provenance")
+        if not isinstance(provenance, Mapping) or set(provenance) != {"chrolo_version", "project", "environment_fingerprints"}:
+            raise ValueError("Capture provenance must contain chrolo_version, project, and environment_fingerprints")
+        for field in ("chrolo_version",):
+            if not isinstance(provenance[field], str) or not provenance[field]:
+                raise ValueError(f"Capture provenance {field} must be a non-empty string")
+        for field in ("project", "environment_fingerprints"):
+            values = provenance[field]
+            if not isinstance(values, Mapping) or any(not isinstance(k, str) or not k or not isinstance(v, str) for k, v in values.items()):
+                raise ValueError(f"Capture provenance {field} must be an object of string values")
+        if not provenance["project"] and not provenance["environment_fingerprints"]:
+            raise ValueError("Capture provenance must include project metadata or an environment fingerprint")
+    elif "provenance" in data:
+        raise ValueError(f"Capture format {capture_format} does not support provenance; use {PROVENANCE_CAPTURE_FORMAT}")
     if "outcome" in data:
         outcome = data["outcome"]
         if not isinstance(outcome, Mapping) or outcome.get("format") != OUTCOME_FORMAT:

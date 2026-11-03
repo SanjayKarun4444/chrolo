@@ -356,10 +356,22 @@ def summarize_trace(
                 for name, adapter_version in adapters.items()
             } if isinstance(adapters, Mapping) else None,
         }
+    capture_provenance = trace.get("provenance")
+    safe_capture_provenance = None
+    if isinstance(capture_provenance, Mapping):
+        project = capture_provenance.get("project")
+        fingerprints = capture_provenance.get("environment_fingerprints")
+        safe_capture_provenance = {
+            "chrolo_version": capture_provenance.get("chrolo_version")
+            if isinstance(capture_provenance.get("chrolo_version"), str) else None,
+            "project": {str(k): str(v) for k, v in project.items()} if isinstance(project, Mapping) else {},
+            "environment_fingerprints": sorted(str(k) for k in fingerprints) if isinstance(fingerprints, Mapping) else [],
+        }
     return {
         "format": trace.get("format", "unknown"),
         "interaction_format": interaction_format,
         "interaction_provenance": provenance,
+        "capture_provenance": safe_capture_provenance,
         "outcome": outcome,
         "trace_size_bytes": trace_size_bytes,
         "event_count": len(events) if isinstance(events, list) else None,

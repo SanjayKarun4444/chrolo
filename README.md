@@ -35,6 +35,8 @@ The adapter accepts a graph factory `module:function` returning a compiled LangG
 
 By default, a graph exception aborts capture as before. Add `--capture-exceptions` to write a `chrolo.langgraph.v2` capture with a versioned `outcome` containing only the exception class; exception messages and stack traces are omitted. Existing `chrolo.langgraph.v1` captures remain supported. Replay returns a structured `{ "status": "exception", "exception_type": "..." }` result for the user's failure oracle, or `{ "status": "success" }` if the exception no longer occurs. Input-only captures still require `--allow-live-side-effects` for replay and minimization.
 
+Capture can also record explicitly selected provenance, which writes `chrolo.langgraph.v3` while preserving the same replay behavior. Use `--project-name`, `--project-commit`, and repeatable `--fingerprint NAME=VALUE`. Fingerprint values are stored verbatim, so pass only non-secret values you intend to retain. Chrolo does not collect environment values automatically. `inspect` reports project metadata and fingerprint names, but omits fingerprint values.
+
 ```bash
 chrolo capture \
   --graph examples.failing_graph:build_graph \

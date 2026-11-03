@@ -7,6 +7,7 @@ import pytest
 
 from chrolo.adapters_langgraph import capture_graph
 from chrolo.adapters_langgraph import OUTCOME_CAPTURE_FORMAT, validate_capture
+from chrolo.adapters_langgraph import PROVENANCE_CAPTURE_FORMAT
 from chrolo.core import parse_events
 from chrolo.safety import summarize_trace
 from examples.failing_graph import build_graph
@@ -145,3 +146,42 @@ def test_capture_replay_and_minimize_exception_failure_without_serializing_messa
         check=False,
     )
     assert fixed.returncode == 0, fixed.stdout + fixed.stderr
+
+
+def test_capture_records_explicit_provenance_and_inspect_hides_fingerprint_values(tmp_path):
+    capture = tmp_path / "provenance.json"
+    source = ROOT / "examples" / "failing_graph_input.json"
+    result = _cli(
+        "capture", "--graph", "examples.failing_graph:build_graph",
+        "--input", source, "--capture-exceptions", "--project-name", "demo",
+        "--project-commit", "abc123", "--fingerprint", "python=3.12.1",
+        "--fingerprint", "region=test-region", "--output", capture,
+    )
+    assert result.returncode == 0, result.stderr
+    saved = json.loads(capture.read_text(encoding="utf-8"))
+    assert saved["format"] == PROVENANCE_CAPTURE_FORMAT
+    assert saved["provenance"]["project"] == {"name": "demo", "commit": "abc123"}
+    assert saved["provenance"]["environment_fingerprints"] == {
+        "python": "3.12.1", "region": "test-region"
+    }
+    validate_capture(saved)
+    inspected = _cli("inspect", capture)
+    assert inspected.returncode == 0, inspected.stderr
+    summary = json.loads(inspected.stdout)
+    assert summary["capture_provenance"]["environment_fingerprints"] == ["python", "region"]
+    assert "test-region" not in inspected.stdout
+
+
+def test_capture_provenance_validation_rejects_malformed_values():
+    from examples.failing_graph import build_graph
+
+    events = parse_events([{"id": "trigger", "kind": "trigger", "payload": {}}])
+    captured = capture_graph(
+        build_graph, {}, events, graph_target="examples.failing_graph:build_graph",
+        capture_exceptions=True, project={"name": "demo"},
+    )
+    validate_capture(captured)
+    malformed = json.loads(json.dumps(captured))
+    malformed["provenance"]["environment_fingerprints"] = {"token": 123}
+    with pytest.raises(ValueError, match="environment_fingerprints"):
+        validate_capture(malformed)
