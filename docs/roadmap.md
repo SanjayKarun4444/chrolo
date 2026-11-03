@@ -218,20 +218,18 @@ A local copy of the public MAD/MAST corpus contains trace strings and LLM-genera
 
 ### Remaining external work
 
-The real-failure comparison cannot be completed responsibly without permissioned agent traces and stable runners for selected real tasks. The OpenAI adapters currently cover synchronous buffered Responses and Chat Completions only; async, streaming, realtime, and other providers need their own adapters and integration fixtures. The LangChain adapter is validated against a fake model only. Keep M2 experimental until supported combinations are precisely documented and verified.
+The remaining task-level comparison needs permissioned traces from actual agent runs and stable runners for their real tasks. AgentFailureBench provides synthetic paired tool traces, and AgentTelemetry provides a deterministic fault-injection runner; neither substitutes for real-agent task executions. The SWE-bench smoke validates one environment and reference-fix oracle but has no paired agent trajectory. Keep the real-agent reliability score open until trace provenance, runner repeatability, and an executable failure oracle are available together.
 
-Build labeled deterministic scenarios for irrelevant event removal, model-dependent and tool-dependent failures, changed requests, unrelated exceptions, mutating tools, redacted/incomplete cassettes, and nondeterminism outside wrapped boundaries.
+The provider adapters currently cover buffered synchronous OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages calls. They preserve JSON response envelopes and tool-call data, return Chrolo result objects, and explicitly reject streaming and async calls. Real SDK response fixtures run in the GitHub Actions matrix after installing the provider extras. The LangChain wrapper is validated with a fake model and the LangGraph integration test. Realtime, other provider SDKs, SDK-typed response reconstruction, and unwrapped side effects remain unsupported; keep M2 experimental.
 
-Measure repeated reproduction rate, false acceptance/rejection of signatures, reduction ratio, candidate count, cassette calls consumed, replay overhead, fixture size, redaction counts, and regression sensitivity after a simulated fix.
+The checked-in synthetic scenarios measure repeated reproduction, signature preservation, shrink, candidate checks, cassette pruning and consumption, replay timing, fixture size, and sensitivity to paired fixes/controls. Their results show signal preservation but no reduction advantage over the naïve baseline in AgentTelemetry or the task-oracle suite. Do not claim real-agent reliability or M2 readiness until the actual execution boundaries, task oracle, and supported framework/provider combinations are independently exercised.
 
-Do not call M2 ready for real agent traces until replay never silently calls live services, signature preservation and tool isolation pass the benchmark, trace limitations are clear, and supported framework/provider combinations are listed precisely.
+Phone visual QA remains outstanding. HTTP/TLS integration tests and responsive-layout assertions pass, but a permitted visual preview or physical-phone check is still needed. The current GitHub origin also returns `Repository not found`, so local commits and the CI workflow have not been published or run by GitHub Actions.
 
-## Suggested delivery order
+## Remaining delivery order
 
-1. Complete M1 contract and clean-environment verification.
-2. Review and freeze M2 schema and strict matching rules.
-3. Implement the framework-neutral cassette engine with fake boundaries.
-4. Add a buffered LangChain chat wrapper, JSON-argument tool wrapper, synchronous OpenAI Responses adapter, and LangGraph integration.
-5. Connect replay to minimization and failure classification.
-6. Add privacy controls, inspection, and compatibility support.
-7. Benchmark reliability and document supported use cases before broadening product claims.
+1. Obtain permissioned real-agent traces paired with deterministic task runners and executable failure oracles.
+2. Run repeated minimization and paired-fix controls on that corpus; keep the results separate from synthetic and recorded-trace differential scores.
+3. Complete the Trace Desk phone visual check through a permitted preview route, including the remote TLS/VPN setup.
+4. Publish the local commits to the confirmed repository so the corrected CI workflow executes on its Python matrix.
+5. Reassess M2's experimental status after provider, framework, and real-agent runner coverage has evidence at the required scope.
