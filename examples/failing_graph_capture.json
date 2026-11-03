@@ -1,0 +1,15 @@
+{
+  "format": "chrolo.langgraph.v2",
+  "graph": "examples.failing_graph:build_graph",
+  "event_key": "events",
+  "initial_state": {},
+  "events": [
+    {"id": "noise", "kind": "noise", "payload": {}},
+    {"id": "trigger", "kind": "trigger", "payload": {}}
+  ],
+  "outcome": {
+    "format": "chrolo.outcome.v1",
+    "status": "exception",
+    "exception_type": "builtins.RuntimeError"
+  }
+}

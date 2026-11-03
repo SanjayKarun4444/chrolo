@@ -16,6 +16,9 @@ def test_minimizer_keeps_dependency_and_signature():
     reduced = minimize(sample(), run, is_failure)
     assert [e.id for e in reduced.events] == ["search", "stale"]
     assert is_failure(run(reduced.events))
+    assert reduced.one_minimal is True
+    assert reduced.accepted_deletions
+    assert reduced.candidate_rejections["oracle_false"] > 0
 
 
 def test_cascade_removal():
@@ -66,6 +69,14 @@ def test_candidate_runner_exception_is_not_accepted_as_original_failure():
 
     result = minimize(events, runner, lambda value: value.get("bug") is True)
     assert [event.id for event in result.events] == ["bug"]
+    assert result.candidate_rejections["runner_exception"] > 0
+
+
+def test_minimality_is_not_claimed_when_check_budget_runs_out():
+    result = minimize(sample(), run, is_failure, max_checks=2)
+    assert result.checks == 2
+    assert result.one_minimal is False
+    assert result.candidate_rejections["oracle_false"] == 1
 
 
 def test_event_dependencies_must_be_an_array_of_ids():

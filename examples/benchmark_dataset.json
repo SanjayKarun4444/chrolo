@@ -1,0 +1,28 @@
+{
+  "format": "chrolo.benchmark.dataset.v1",
+  "cases": [
+    {
+      "id": "synthetic_stateful_issue_selection",
+      "initial_state": {},
+      "step": "examples.stateful_agent:step",
+      "fixed_step": "examples.stateful_agent:fixed_step",
+      "oracle": "examples.stateful_agent:wrong_issue",
+      "events": [
+        {"id": "boot", "kind": "telemetry", "payload": {}},
+        {"id": "search", "kind": "search", "payload": {"issue_id": 42}},
+        {"id": "select", "kind": "select", "payload": {"cached_issue_id": 99}},
+        {"id": "done", "kind": "telemetry", "payload": {}}
+      ]
+    },
+    {
+      "id": "captured_exception_failure",
+      "events": [
+        {"id": "noise", "kind": "noise", "payload": {}},
+        {"id": "trigger", "kind": "trigger", "payload": {}}
+      ],
+      "runner": "examples.failing_graph:run_captured_failure",
+      "oracle": "examples.failing_graph:original_failure",
+      "fixed_runner": "examples.failing_graph:run_fixed_failure"
+    }
+  ]
+}

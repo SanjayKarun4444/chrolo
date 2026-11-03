@@ -1,0 +1,7 @@
+{
+  "initial_state": {},
+  "events": [
+    {"id": "noise", "kind": "noise", "payload": {}},
+    {"id": "trigger", "kind": "trigger", "payload": {}}
+  ]
+}

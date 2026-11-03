@@ -1,0 +1,15 @@
+{
+  "initial_state": {},
+  "events": [
+    {
+      "id": "optional_probe",
+      "kind": "probe",
+      "payload": {"query": "diagnostic"}
+    },
+    {
+      "id": "trigger",
+      "kind": "trigger",
+      "payload": {"request": "failure"}
+    }
+  ]
+}

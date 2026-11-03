@@ -1,8 +1,12 @@
 import pytest
+import uuid
 
 from chrolo.core import minimize, parse_events
 from chrolo.cassette import (
     FORMAT,
+    LEGACY_FORMAT,
+    BoundaryContext,
+    BoundaryTool,
     CassetteRecorder,
     RecordedCallError,
     ReplayMismatch,
@@ -27,6 +31,10 @@ def test_record_then_replay_returns_recorded_values_without_live_calls():
     trace = recorder.to_dict()
     assert live_calls == {"model": 1, "tool": 1}
     assert trace["format"] == FORMAT
+    assert trace["header"]["schema_version"] == 2
+    assert trace["header"]["chrolo_version"]
+    assert uuid.UUID(trace["header"]["execution_id"])
+    assert trace["header"]["adapters"] == {"chrolo.boundary": "1"}
 
     replay = ReplaySession.from_dict(trace)
     assert replay.call("model", "fake.chat", {"prompt": "choose"}) == {
@@ -66,8 +74,35 @@ def test_replay_rejects_boundary_target_or_request_mismatch(boundary, target, re
     assert replay.consumed == 0
 
 
+def test_replay_rejects_changed_or_missing_context_without_consuming_record():
+    recorder = CassetteRecorder()
+    recorder.call("tool", "lookup", {"id": 1}, lambda: "value", context={"node": "search"})
+    trace = recorder.to_dict()
+    assert trace["interactions"][0]["context"] == {"node": "search"}
+
+    replay = ReplaySession.from_dict(trace)
+    with pytest.raises(ReplayMismatch, match="context differs"):
+        replay.call("tool", "lookup", {"id": 1})
+    assert replay.consumed == 0
+
+    with pytest.raises(ReplayMismatch, match="context differs"):
+        replay.call("tool", "lookup", {"id": 1}, context={"node": "other"})
+    assert replay.consumed == 0
+
+    assert replay.call("tool", "lookup", {"id": 1}, context={"node": "search"}) == "value"
+    replay.finish()
+
+
+def test_context_is_validated_before_live_boundary_call():
+    calls = []
+    recorder = CassetteRecorder()
+    with pytest.raises(ValueError, match="context must be a JSON object"):
+        recorder.call("tool", "lookup", {}, lambda: calls.append(1), context=["not", "object"])
+    assert calls == []
+
+
 def test_replay_rejects_unexpected_and_unconsumed_calls():
-    replay = ReplaySession.from_dict({"format": FORMAT, "interactions": []})
+    replay = ReplaySession.from_dict({"format": LEGACY_FORMAT, "interactions": []})
     with pytest.raises(ReplayMismatch, match="cassette is exhausted"):
         replay.call("tool", "lookup", {})
 
@@ -76,6 +111,50 @@ def test_replay_rejects_unexpected_and_unconsumed_calls():
     replay = ReplaySession.from_dict(recorder.to_dict())
     with pytest.raises(ReplayMismatch, match="not consumed"):
         replay.finish()
+
+
+def test_minimization_replay_skips_only_unused_ordered_records_and_reports_used_calls():
+    recorder = CassetteRecorder()
+    recorder.call("tool", "diagnostic", {"query": "unused"}, lambda: {"ok": True})
+    recorder.call("model", "answer", {"prompt": "failure"}, lambda: {"failure": True})
+    trace = recorder.to_dict()
+
+    candidate = ReplaySession.from_dict(trace, allow_skips=True)
+    assert candidate.call("model", "answer", {"prompt": "failure"}) == {"failure": True}
+    candidate.finish()
+    assert [item["id"] for item in candidate.used_interactions] == ["call-000002"]
+
+    # Ordinary replay keeps its strict head-of-cassette behavior.
+    strict = ReplaySession.from_dict(trace)
+    with pytest.raises(ReplayMismatch, match="expected tool boundary"):
+        strict.call("model", "answer", {"prompt": "failure"})
+
+
+def test_minimization_replay_rejects_ambiguous_duplicate_future_calls():
+    recorder = CassetteRecorder()
+    recorder.call("tool", "diagnostic", {}, lambda: {"ok": True})
+    recorder.call("model", "answer", {"prompt": "same"}, lambda: {"answer": 1})
+    recorder.call("model", "answer", {"prompt": "same"}, lambda: {"answer": 2})
+    candidate = ReplaySession.from_dict(recorder.to_dict(), allow_skips=True)
+
+    with pytest.raises(ReplayMismatch, match="ambiguous repeated interaction"):
+        candidate.call("model", "answer", {"prompt": "same"})
+    assert candidate.used_interactions == []
+
+
+def test_minimization_replay_still_rejects_changed_requests_and_reordered_calls():
+    recorder = CassetteRecorder()
+    recorder.call("tool", "diagnostic", {}, lambda: {"ok": True})
+    recorder.call("model", "answer", {"prompt": "recorded"}, lambda: {"answer": 1})
+    changed = ReplaySession.from_dict(recorder.to_dict(), allow_skips=True)
+    with pytest.raises(ReplayMismatch, match="no matching recorded interaction"):
+        changed.call("model", "answer", {"prompt": "changed"})
+
+    recorder.call("tool", "lookup", {"id": 1}, lambda: {"value": 1})
+    reordered = ReplaySession.from_dict(recorder.to_dict(), allow_skips=True)
+    assert reordered.call("tool", "lookup", {"id": 1}) == {"value": 1}
+    with pytest.raises(ReplayMismatch, match="cassette is exhausted|no matching recorded interaction"):
+        reordered.call("model", "answer", {"prompt": "recorded"})
 
 
 def test_recorded_boundary_error_replays_as_data_without_live_invocation():
@@ -114,12 +193,39 @@ def test_trace_validation_rejects_bad_version_sequence_and_ambiguous_outcome():
     with pytest.raises(ValueError, match="Unsupported cassette format"):
         ReplaySession.from_dict({"format": "old", "interactions": []})
     with pytest.raises(ValueError, match="sequence"):
-        ReplaySession.from_dict({"format": FORMAT, "interactions": [{
+        ReplaySession.from_dict({"format": LEGACY_FORMAT, "interactions": [{
             "id": "call-000001", "sequence": 1, "boundary": "tool",
             "target": "lookup", "request": {}, "response": None,
         }]})
+
+
+def test_v2_header_is_required_and_legacy_v1_remains_readable():
+    with pytest.raises(ValueError, match="header must be an object"):
+        ReplaySession.from_dict({"format": FORMAT, "interactions": []})
+
+    legacy = {
+        "format": LEGACY_FORMAT,
+        "interactions": [{
+            "id": "call-000001", "sequence": 0, "boundary": "tool",
+            "target": "lookup", "request": {"id": 1}, "response": {"ok": True},
+        }],
+    }
+    session = ReplaySession.from_dict(legacy)
+    assert session.call("tool", "lookup", {"id": 1}) == {"ok": True}
+    session.finish()
+
+    legacy_with_context = {
+        "format": LEGACY_FORMAT,
+        "interactions": [{
+            "id": "call-000001", "sequence": 0, "boundary": "tool",
+            "target": "lookup", "request": {}, "context": {"node": "tool"},
+            "response": {"ok": True},
+        }],
+    }
+    with pytest.raises(ValueError, match="not supported by cassette v1"):
+        ReplaySession.from_dict(legacy_with_context)
     with pytest.raises(ValueError, match="exactly one"):
-        ReplaySession.from_dict({"format": FORMAT, "interactions": [{
+        ReplaySession.from_dict({"format": LEGACY_FORMAT, "interactions": [{
             "id": "call-000001", "sequence": 0, "boundary": "tool",
             "target": "lookup", "request": {}, "response": None, "error": {},
         }]})
@@ -177,3 +283,26 @@ def test_minimizer_replays_fresh_cassette_per_candidate_without_live_calls():
 
     assert [event.id for event in result.events] == ["search", "cache"]
     assert live_calls == recorded_call_counts
+
+
+def test_boundary_tool_replays_recorded_result_without_side_effect():
+    side_effects = []
+    recorder = CassetteRecorder()
+    live_tool = BoundaryTool(
+        lambda args: side_effects.append(args["id"]) or {"ok": True},
+        BoundaryContext.recording(recorder),
+        "demo.mutate",
+        context={"node": "execute_tool"},
+    )
+    assert live_tool({"id": 7}) == {"ok": True}
+    trace = recorder.to_dict()
+    assert side_effects == [7]
+
+    offline_tool = BoundaryTool(
+        lambda args: side_effects.append("unexpected"),
+        BoundaryContext.replaying(ReplaySession.from_dict(trace)),
+        "demo.mutate",
+        context={"node": "execute_tool"},
+    )
+    assert offline_tool({"id": 7}) == {"ok": True}
+    assert side_effects == [7]

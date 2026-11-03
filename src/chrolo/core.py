@@ -5,7 +5,7 @@ harness and a narrowly scoped failure predicate. Traces contain *data*, never co
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import ceil
 from typing import Any, Callable, Mapping, Sequence
 
@@ -69,6 +69,9 @@ class MinimizeResult:
     events: list[Event]
     checks: int
     baseline_failed: bool
+    accepted_deletions: list[dict[str, list[str]]] = field(default_factory=list)
+    candidate_rejections: dict[str, int] = field(default_factory=dict)
+    one_minimal: bool = False
 
 
 def minimize(
@@ -92,6 +95,25 @@ def minimize(
         raise ValueError("max_checks must be positive")
     current = list(events)
     checks = 0
+    accepted_deletions: list[dict[str, list[str]]] = []
+    rejections = {"runner_exception": 0, "oracle_exception": 0, "oracle_false": 0}
+
+    def check_candidate(candidate: list[Event]) -> bool:
+        nonlocal checks
+        checks += 1
+        try:
+            candidate_result = run(list(candidate))
+        except Exception:
+            rejections["runner_exception"] += 1
+            return False
+        try:
+            reproduced = bool(is_failure(candidate_result))
+        except Exception:
+            rejections["oracle_exception"] += 1
+            return False
+        if not reproduced:
+            rejections["oracle_false"] += 1
+        return reproduced
     try:
         baseline_result = run(list(current))
     except Exception as exc:
@@ -115,12 +137,10 @@ def minimize(
             candidate = remove_cascade(current, removed)
             if len(candidate) == len(current):
                 continue
-            checks += 1
-            try:
-                reproduced = bool(is_failure(run(list(candidate))))
-            except Exception:
-                reproduced = False
-            if reproduced:
+            if check_candidate(candidate):
+                remaining = {event.id for event in candidate}
+                removed_ids = [event.id for event in current if event.id not in remaining]
+                accepted_deletions.append({"removed": removed_ids, "remaining": [event.id for event in candidate]})
                 current = candidate
                 granularity = max(2, granularity - 1)
                 reduced = True
@@ -133,21 +153,24 @@ def minimize(
 
     # An additional greedy pass provides 1-minimality under deletion with
     # dependency cascade when there is sufficient evaluation budget.
-    changed = True
-    while changed and checks < max_checks:
+    while True:
         changed = False
+        pass_complete = True
         for event in list(current):
             if checks >= max_checks:
+                pass_complete = False
                 break
             candidate = remove_cascade(current, {event.id})
-            checks += 1
-            try:
-                reproduced = bool(is_failure(run(list(candidate))))
-            except Exception:
-                reproduced = False
-            if reproduced:
+            if check_candidate(candidate):
+                remaining = {item.id for item in candidate}
+                removed_ids = [item.id for item in current if item.id not in remaining]
+                accepted_deletions.append({"removed": removed_ids, "remaining": [item.id for item in candidate]})
                 current = candidate
                 changed = True
                 break
+        if changed:
+            continue
+        one_minimal = pass_complete
+        break
 
-    return MinimizeResult(current, checks, baseline_failed)
+    return MinimizeResult(current, checks, baseline_failed, accepted_deletions, rejections, one_minimal)

@@ -1,0 +1,9 @@
+{
+  "initial_state": {},
+  "events": [
+    {"id": "boot", "kind": "telemetry", "payload": {}},
+    {"id": "search", "kind": "search", "payload": {"issue_id": 42}},
+    {"id": "select", "kind": "select", "payload": {"cached_issue_id": 99}},
+    {"id": "done", "kind": "telemetry", "payload": {}}
+  ]
+}
