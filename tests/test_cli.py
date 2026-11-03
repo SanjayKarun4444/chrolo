@@ -97,3 +97,19 @@ def test_minimize_missing_events_reports_actionable_error(tmp_path):
     assert result.returncode == 2
     assert f"{scenario}: required field 'events' is missing" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_serve_cli_forwards_advertise_ip_to_trace_desk(monkeypatch):
+    from chrolo import cli
+
+    calls = []
+    monkeypatch.setattr(cli, "serve_web", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["chrolo", "serve", "--host", "0.0.0.0", "--advertise-ip", "100.71.4.2"],
+    )
+
+    cli.main()
+
+    assert calls == [(("0.0.0.0", 8765, None, None, None), {"advertise_ip": "100.71.4.2"})]
