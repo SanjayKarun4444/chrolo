@@ -42,7 +42,12 @@ def test_trace_desk_http_auth_headers_and_payload_free_inspection():
         status, headers, page = request("GET", "/", authorized=True)
         assert status == 200
         assert ("Cache-Control", "no-store") in headers
-        assert any(name == "Content-Security-Policy" and "object-src 'none'" in value for name, value in headers)
+        assert any(
+            name == "Content-Security-Policy"
+            and "object-src 'none'" in value
+            and "frame-ancestors 'none'" in value
+            for name, value in headers
+        )
         assert b"Chrolo Trace Desk" in page
 
         private = "do not expose this prompt"
