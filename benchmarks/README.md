@@ -42,3 +42,26 @@ At AgentTelemetry commit `33feec2d434ed4a77862fd1698f09bc23926df1b`, the full 17
 The local SWE-bench Multimodal task shards contain runnable test scripts and Docker images, but do not contain agent interaction traces. Docker access in this environment requires an approved elevated command because the sandbox cannot open Docker's Windows named pipe. The Docker Desktop engine was verified as running, then task `Automattic__wp-calypso-21409` was exercised in its published image (`swebench/sweb.eval.x86_64.automattic_1776_wp-calypso-21409:latest`). The base checkout produced the expected 3 failing `FAIL_TO_PASS` tests while all 30 `PASS_TO_PASS` tests passed; applying the dataset's reference patch made all 33 tests pass. This verifies the task runner and the test oracle's fix sensitivity. The supplied shell script exits zero even when Jest reports failing tests, so a consumer must parse the test summary or use the dataset's log parser rather than trust the process exit code alone. This is not a Chrolo trace-minimization score: the dataset has code patches and test expectations, not a recorded agent execution to replay and minimize.
 
 Real-world minimization scores still require runners that can deterministically re-execute selected real traces with stable task-level failure oracles.
+
+## AgentFailureBench paired trace-difference integration
+
+The [AgentFailureBench dataset](https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench) supplies synthetic failed and corrected tool trajectories. Chrolo's builder includes only records with an exact tool-call or tool-output difference, then treats the recorded difference as a witness. It replays those recorded observations and does not execute tools, recreate an environment, or establish task success/failure independently. The upstream dataset describes its traces as procedurally generated and documents the corresponding limitations in [`LIMITATIONS.md`](https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench/blob/main/LIMITATIONS.md).
+
+For the held-out `test` split at revision `93257fb` (CC BY 4.0), 1,000 records produced 562 included trace-difference cases, 283 clean records skipped, and 155 labeled failures skipped because tool calls/outputs did not differ from the paired corrected trace. Run the builder and benchmark with:
+
+```powershell
+Invoke-WebRequest -Uri "https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench/resolve/93257fb/dataset/test.jsonl?download=true" -OutFile results/agent_failure_bench_test.jsonl
+python benchmarks/build_agentfailurebench_dataset.py --input results/agent_failure_bench_test.jsonl --output results/agentfailurebench_chrolo_dataset.json --source-revision 93257fb --split test
+$env:PYTHONPATH = "src"
+@'
+import json
+from pathlib import Path
+from chrolo.benchmark import run_dataset
+dataset = json.loads(Path("results/agentfailurebench_chrolo_dataset.json").read_text(encoding="utf-8"))
+report = run_dataset(dataset, repeat=20)
+Path("results/agentfailurebench_chrolo_report_repeat20.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+print(json.dumps(report["aggregate"], indent=2))
+'@ | .\.venv\Scripts\python.exe -
+```
+
+Observed on this run: all 562 cases reproduced on all 20 repetitions, all minimized outputs preserved the exact recorded witness, all 562 were 1-minimal under tested deletion cascades, and the supplied corrected-trace intervention cleared the witness in all cases. Mean event shrink was 16.00% (naïve single-pass baseline: 34.09%); Chrolo used 10.60 checks per case (baseline: 4.20). This is a trace-differential minimization benchmark over synthetic paired recordings, not an independent task-level or production-agent benchmark. Both generated dataset and report are ignored under `results/`.

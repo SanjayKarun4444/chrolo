@@ -288,6 +288,10 @@ def run_dataset(dataset: Any, *, repeat: int = 20) -> dict[str, Any]:
         "source", "source_commit", "python_version", "source_records",
         "included_reproducible_fault_cases", "skipped_controls_or_undetected_faults",
         "comparison_scope", "runner_requires_environment", "detector_evaluation",
+        "source_revision", "split", "license", "generator_version", "schema_version",
+        "included_execution_divergence_cases", "skipped_clean_records",
+        "skipped_failures_without_execution_witness", "included_failure_categories",
+        "limitations",
     )
     reported_metadata = {key: metadata[key] for key in provenance_fields if key in metadata}
 
