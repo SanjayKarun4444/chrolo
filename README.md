@@ -212,7 +212,7 @@ For a mobile-friendly local trace desk, run `chrolo serve` and open the printed 
 chrolo serve --host 0.0.0.0 --tls-certfile cert.pem --tls-keyfile key.pem
 ```
 
-For `--host 0.0.0.0`, startup lists the private IPv4 URLs it can discover and prints the Basic Auth username (`chrolo`) and generated password. From outside the local Wi-Fi, connect both devices to the same private VPN and open the workstation's VPN address; do not expose the port to the public internet. The certificate must be trusted by the phone and match the address you open. For a private LAN or VPN where TLS is not configured, the server prints a warning; Basic Auth and trace uploads are then unencrypted at the app layer. Filtered and redacted downloads cannot be replayed.
+For `--host 0.0.0.0`, startup lists discovered private IPv4 addresses and VPN addresses in `100.64.0.0/10`, then prints the Basic Auth username (`chrolo`) and generated password. From outside the local Wi-Fi, connect both devices to the same private VPN and open the workstation's VPN address; do not expose the port to the public internet. The certificate must be trusted by the phone and match the address you open. For a private LAN or VPN where TLS is not configured, the server prints a warning; Basic Auth and trace uploads are then unencrypted at the app layer. Filtered and redacted downloads cannot be replayed.
 
 Run `chrolo scan trace.json` to list likely secret paths and detector reasons without printing matched values. The heuristic checks sensitive field names and common credential formats; it may miss secrets embedded in prose or unsupported formats. Review candidates, then use `chrolo redact` with the returned paths. A clean scan is not proof that a trace is safe to share.
 

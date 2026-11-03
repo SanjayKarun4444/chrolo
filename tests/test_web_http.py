@@ -111,7 +111,7 @@ def test_trace_desk_tls_requires_certificate_and_key_pair():
         raise AssertionError("TLS accepted an incomplete certificate/key pair")
 
 
-def test_lan_address_discovery_filters_loopback_and_public_addresses(monkeypatch):
+def test_lan_address_discovery_includes_cgnat_vpn_and_filters_other_addresses(monkeypatch):
     monkeypatch.setattr(web.socket, "gethostname", lambda: "trace-desk-host")
     monkeypatch.setattr(
         web.socket,
@@ -121,11 +121,14 @@ def test_lan_address_discovery_filters_loopback_and_public_addresses(monkeypatch
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.25", 0)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.25", 0)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.1.20", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.71.4.2", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.63.255.254", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.128.0.1", 0)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
         ],
     )
 
-    assert web._lan_ipv4_addresses() == ["192.168.1.25"]
+    assert web._lan_ipv4_addresses() == ["100.71.4.2", "192.168.1.25"]
 
 
 def test_remote_startup_prints_private_url_and_fixed_basic_auth_username(monkeypatch, capsys):

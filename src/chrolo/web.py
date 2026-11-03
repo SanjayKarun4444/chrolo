@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from .safety import filter_trace, redact_trace, scan_trace, summarize_trace
 
 MAX_UPLOAD_BYTES = 11 * 1024 * 1024
+_CGNAT_IPV4 = ipaddress.ip_network("100.64.0.0/10")
 
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -95,7 +96,7 @@ def _is_loopback(host: str) -> bool:
 
 
 def _lan_ipv4_addresses() -> list[str]:
-    """Return private IPv4 addresses resolved for this machine's hostname."""
+    """Return private and CGNAT VPN IPv4 addresses for this machine."""
     try:
         entries = socket.getaddrinfo(
             socket.gethostname(), None, family=socket.AF_INET, type=socket.SOCK_STREAM
@@ -105,7 +106,11 @@ def _lan_ipv4_addresses() -> list[str]:
     addresses = set()
     for entry in entries:
         address = ipaddress.ip_address(entry[4][0])
-        if address.is_private and not address.is_loopback and not address.is_link_local:
+        if (
+            (address.is_private or address in _CGNAT_IPV4)
+            and not address.is_loopback
+            and not address.is_link_local
+        ):
             addresses.add(str(address))
     return sorted(addresses)
 
@@ -213,7 +218,7 @@ def serve(
             if host in {"0.0.0.0", "::"}:
                 addresses = _lan_ipv4_addresses()
                 if addresses:
-                    print("On another device on this private network, open:")
+                    print("On another device on this private network or VPN, open:")
                     for address in addresses:
                         print(f"  {scheme}://{address}:{actual_port}/")
                 else:
