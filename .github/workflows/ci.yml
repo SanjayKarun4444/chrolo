@@ -29,3 +29,14 @@ jobs:
       - run: .wheel-smoke/bin/python -m pip install --no-deps dist/*.whl
       - run: .wheel-smoke/bin/chrolo --help
       - run: .wheel-smoke/bin/chrolo benchmark --repeat 1
+      - name: Smoke test packaged minimize workflow
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          .wheel-smoke/bin/chrolo minimize examples/minimal.json \
+            --run examples.buggy_agent:run \
+            --oracle examples.buggy_agent:is_failure \
+            --output "$RUNNER_TEMP/minimal.json" \
+            --test "$RUNNER_TEMP/test_chrolo_regression.py"
+          test -s "$RUNNER_TEMP/minimal.json"
+          test -s "$RUNNER_TEMP/test_chrolo_regression.py"
