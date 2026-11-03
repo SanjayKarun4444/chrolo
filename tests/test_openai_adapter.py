@@ -9,7 +9,10 @@ from chrolo.cassette import (
     ReplayMismatch,
     ReplaySession,
 )
-from chrolo.openai_adapter import BoundaryOpenAIResponses
+from chrolo.openai_adapter import (
+    BoundaryOpenAIChatCompletions,
+    BoundaryOpenAIResponses,
+)
 
 
 class FakeResponse:
@@ -41,6 +44,21 @@ class FakeResponses:
 class FakeClient:
     def __init__(self, **kwargs):
         self.responses = FakeResponses(**kwargs)
+
+
+class FakeChatClient:
+    def __init__(self, **kwargs):
+        self.chat = type("Chat", (), {})()
+        self.chat.completions = FakeResponses(**kwargs)
+
+
+class FakeChatResponse:
+    def to_dict(self, *, mode="python"):
+        assert mode == "json"
+        return {
+            "id": "chatcmpl_test",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "hello"}}],
+        }
 
 
 def test_record_then_replay_returns_same_normalized_result_without_sdk_call():
@@ -174,3 +192,80 @@ def test_openai_sdk_response_serializes_and_replays_without_losing_output():
     assert replayed == recorded
     assert replayed.response == response.to_dict(mode="json")
     assert offline_client.responses.calls == []
+
+
+def test_chat_completions_record_then_replay_without_sdk_call():
+    client = FakeChatClient(result=FakeChatResponse())
+    recorder = CassetteRecorder()
+    live = BoundaryOpenAIChatCompletions(
+        client,
+        BoundaryContext.recording(recorder),
+        "openai:chat-completions:stable-model",
+        sdk_version="test-sdk",
+    )
+    recorded = live.create(model="stable-model", messages=[{"role": "user", "content": "hello"}])
+    offline_client = FakeChatClient()
+    replay = BoundaryOpenAIChatCompletions(
+        offline_client,
+        BoundaryContext.replaying(ReplaySession.from_dict(recorder.to_dict())),
+        "openai:chat-completions:stable-model",
+        sdk_version="test-sdk",
+    )
+    replayed = replay.create(model="stable-model", messages=[{"role": "user", "content": "hello"}])
+    assert replayed == recorded
+    assert replayed.output_text == "hello"
+    assert replayed.response["choices"][0]["message"]["content"] == "hello"
+    assert len(client.chat.completions.calls) == 1
+    assert offline_client.chat.completions.calls == []
+
+
+def test_chat_completions_reject_streaming_without_live_call():
+    client = FakeChatClient()
+    model = BoundaryOpenAIChatCompletions(
+        client, BoundaryContext.recording(CassetteRecorder()), "openai:chat", sdk_version="test-sdk"
+    )
+    with pytest.raises(ValueError, match="streaming is not supported"):
+        model.create(model="stable-model", messages=[], stream=True)
+    assert client.chat.completions.calls == []
+
+
+def test_openai_sdk_chat_completion_serializes_and_replays_tool_calls():
+    openai = pytest.importorskip("openai")
+    from openai.types.chat import ChatCompletion
+
+    response = ChatCompletion.model_validate({
+        "id": "chatcmpl_123",
+        "created": 1735689600,
+        "model": "gpt-4.1",
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "tool_calls",
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "call_123",
+                    "type": "function",
+                    "function": {"name": "lookup_ticket", "arguments": "{\"id\":\"T-1\"}"},
+                }],
+            },
+        }],
+    })
+    client = FakeChatClient(result=response)
+    recorder = CassetteRecorder()
+    live = BoundaryOpenAIChatCompletions(
+        client, BoundaryContext.recording(recorder), "openai:chat:gpt-4.1", sdk_version=openai.__version__
+    )
+    recorded = live.create(model="gpt-4.1", messages=[{"role": "user", "content": "look up"}])
+    offline_client = FakeChatClient()
+    replay = BoundaryOpenAIChatCompletions(
+        offline_client,
+        BoundaryContext.replaying(ReplaySession.from_dict(recorder.to_dict())),
+        "openai:chat:gpt-4.1",
+        sdk_version=openai.__version__,
+    )
+    replayed = replay.create(model="gpt-4.1", messages=[{"role": "user", "content": "look up"}])
+    assert replayed.response == response.to_dict(mode="json")
+    assert replayed.response["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "lookup_ticket"
+    assert offline_client.chat.completions.calls == []
