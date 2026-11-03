@@ -188,7 +188,26 @@ def _create_server(
             self.end_headers()
             return False
 
+        def _host_is_allowed(self) -> bool:
+            """Block DNS-rebinding hostnames from accessing an unauthenticated loopback server."""
+            if not _is_loopback(self.server.server_address[0]):
+                return True
+            supplied = self.headers.get("Host", "")
+            try:
+                hostname = urlsplit("//" + supplied).hostname
+            except ValueError:
+                return False
+            return hostname is not None and _is_loopback(hostname.rstrip("."))
+
+        def _reject_invalid_host(self) -> bool:
+            if self._host_is_allowed():
+                return False
+            self._send(421, b"Invalid Host header", "text/plain; charset=utf-8")
+            return True
+
         def do_GET(self) -> None:
+            if self._reject_invalid_host():
+                return
             if not self._authorized():
                 return
             if urlsplit(self.path).path != "/":
@@ -197,6 +216,8 @@ def _create_server(
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
 
         def do_POST(self) -> None:
+            if self._reject_invalid_host():
+                return
             if not self._authorized():
                 return
             if urlsplit(self.path).path not in {"/api/inspect", "/api/scan", "/api/redact", "/api/filter"}:

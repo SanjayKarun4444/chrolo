@@ -21,9 +21,11 @@ def test_trace_desk_http_auth_headers_and_payload_free_inspection():
     host, port = server.server_address
     auth = "Basic " + base64.b64encode(f"chrolo:{password}".encode()).decode("ascii")
 
-    def request(method, path, body=None, *, authorized=False):
+    def request(method, path, body=None, *, authorized=False, host_header=None):
         connection = http.client.HTTPConnection(host, port, timeout=5)
         headers = {}
+        if host_header is not None:
+            headers["Host"] = host_header
         if authorized:
             headers["Authorization"] = auth
         if body is not None:
@@ -35,6 +37,10 @@ def test_trace_desk_http_auth_headers_and_payload_free_inspection():
         return result
 
     try:
+        status, _, rejected = request("GET", "/", host_header=f"rebinding.example:{port}")
+        assert status == 421
+        assert b"Invalid Host header" in rejected
+
         status, headers, _ = request("GET", "/")
         assert status == 401
         assert ("WWW-Authenticate", 'Basic realm="Chrolo Trace Desk"') in headers
