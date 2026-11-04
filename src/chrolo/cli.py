@@ -193,6 +193,8 @@ def benchmark_openhands_cmd(args):
         f"reproduction {report['reproduction_rate']:.0%}; "
         f"failure preserved: {'yes' if report['failure_signature_preserved'] else 'no'}"
     )
+    if report.get("fix_sensitivity_rate") is not None:
+        print(f"Reference-fix sensitivity: {report['fix_sensitivity_rate']:.0%}")
     print(f"Report and reduced action payloads (may contain secrets): {args.output}")
 
 

@@ -29,6 +29,15 @@ from pathlib import Path
 request = json.load(sys.stdin)
 root = Path(request["workdir"]).resolve()
 
+reference_patch = request.get("reference_patch")
+if reference_patch is not None:
+    patched = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=root,
+                             input=reference_patch, text=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             timeout=request["test_timeout"])
+    if patched.returncode != 0:
+        raise RuntimeError("reference patch could not be applied")
+
 def in_workspace(value):
     candidate = Path(value)
     if not candidate.is_absolute():
@@ -112,6 +121,7 @@ class OpenHandsDockerRunner:
         memory: str = "4g",
         cpus: str = "2",
         pids_limit: int = 256,
+        reference_patch: str | None = None,
     ) -> None:
         if not isinstance(image, str) or not image.strip():
             raise ValueError("Docker image must be a non-empty string")
@@ -127,6 +137,8 @@ class OpenHandsDockerRunner:
             raise ValueError("Test command must be a non-empty string")
         if not isinstance(docker_executable, str) or not docker_executable:
             raise ValueError("Docker executable must be a non-empty string")
+        if reference_patch is not None and not isinstance(reference_patch, str):
+            raise ValueError("reference_patch must be a string")
         for name, value in (("action_timeout", action_timeout), ("test_timeout", test_timeout), ("total_timeout", total_timeout), ("pids_limit", pids_limit)):
             if type(value) is not int or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
@@ -146,6 +158,7 @@ class OpenHandsDockerRunner:
         self.memory = memory
         self.cpus = cpus
         self.pids_limit = pids_limit
+        self.reference_patch = reference_patch
 
     def docker_argv(self, container_name: str | None = None) -> list[str]:
         """Build the bounded Docker invocation, useful for audit and testing."""
@@ -194,6 +207,7 @@ class OpenHandsDockerRunner:
             "fail_to_pass": self.fail_to_pass,
             "pass_to_pass": self.pass_to_pass,
             "result_pattern": _RESULT_PATTERN.pattern,
+            "reference_patch": self.reference_patch,
         }
         container_name = f"chrolo-replay-{uuid.uuid4().hex}"
         argv = self.docker_argv(container_name)
@@ -322,6 +336,23 @@ def benchmark_openhands_trace(
     except Exception:
         minimized_result = None
         preserved = False
+
+    fix_sensitivity_rate = None
+    failure_after_reference_patch = None
+    if isinstance(task.get("reference_patch"), str) and task["reference_patch"].strip():
+        fixed_runner = runner_factory(**runner_options, reference_patch=task["reference_patch"])
+        fixed_repeats: list[bool | None] = []
+        for _ in range(repeat):
+            try:
+                fixed_repeats.append(bool(oracle(fixed_runner(list(result.events)))))
+            except Exception:
+                fixed_repeats.append(None)
+        valid_fixed = [value for value in fixed_repeats if value is not None]
+        fix_sensitivity_rate = (
+            sum(value is False for value in valid_fixed) / len(valid_fixed)
+            if valid_fixed else None
+        )
+        failure_after_reference_patch = fixed_repeats[-1] if fixed_repeats else None
     original_count = len(events)
     minimized_count = len(result.events)
     return {
@@ -334,6 +365,8 @@ def benchmark_openhands_trace(
         "baseline_failed_to_pass": sorted(expected_failures),
         "baseline_passed_to_pass": sorted(expected_controls),
         "failure_signature_preserved": preserved,
+        "failure_after_reference_patch": failure_after_reference_patch,
+        "fix_sensitivity_rate": fix_sensitivity_rate,
         "minimized_result": minimized_result,
         "original_events": original_count,
         "remaining_events": minimized_count,

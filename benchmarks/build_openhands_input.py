@@ -45,8 +45,8 @@ def build_input(trace_source: dict[str, Any], task_row: dict[str, Any]) -> dict[
     if not isinstance(trajectory, list):
         raise ValueError("OpenHands trace trajectory must be an array")
 
-    # Allowlist only runner inputs. Patches, prompts, model output, and task
-    # description are unnecessary for this workflow and may carry private data.
+    # Allowlist runner inputs and the official patch for the paired fix
+    # intervention. Prompts, model output, and task description are unnecessary.
     row = {"instance_id": instance_id, "repo": trace.get("repo"), "trajectory": trajectory}
     task = {
         "image": image,
@@ -55,6 +55,8 @@ def build_input(trace_source: dict[str, Any], task_row: dict[str, Any]) -> dict[
         "test_command": test_command,
         "workdir": "/testbed",
     }
+    if isinstance(task_row.get("patch"), str) and task_row["patch"].strip():
+        task["reference_patch"] = task_row["patch"]
     if isinstance(task_row.get("license_name"), str):
         task["license"] = task_row["license_name"]
     return {"row": row, "task": task}

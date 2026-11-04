@@ -115,9 +115,10 @@ def test_benchmark_orchestrates_repetition_exact_oracle_and_minimization():
     class FakeRunner:
         def __init__(self, **kwargs):
             assert kwargs["image"] == "example/task:latest"
+            self.fixed = kwargs.get("reference_patch") is not None
 
         def __call__(self, events):
-            broken = any(event.payload["arguments"].get("marker") == "bug" for event in events)
+            broken = not self.fixed and any(event.payload["arguments"].get("marker") == "bug" for event in events)
             return {
                 "failed_to_pass": [FAIL] if broken else [],
                 "passed_to_pass": [CONTROL],
@@ -141,6 +142,7 @@ def test_benchmark_orchestrates_repetition_exact_oracle_and_minimization():
         "fail_to_pass": [FAIL],
         "pass_to_pass": [CONTROL],
         "test_command": "pytest -rA --color=no",
+        "reference_patch": "diff --git a/src/a.py b/src/a.py\n",
     }
 
     report = benchmark_openhands_trace(row, task, repeat=3, runner_factory=FakeRunner)
@@ -150,6 +152,8 @@ def test_benchmark_orchestrates_repetition_exact_oracle_and_minimization():
     assert report["remaining_events"] == 1
     assert report["one_minimal_under_tested_cascade_deletions"] is True
     assert [event["id"] for event in report["events"]] == ["action-0001"]
+    assert report["fix_sensitivity_rate"] == 1
+    assert report["failure_after_reference_patch"] is False
 
 
 def test_benchmark_requires_a_baseline_failure_and_passing_controls():

@@ -21,7 +21,7 @@ def test_build_input_joins_matching_task_and_allowlists_sensitive_source_fields(
         "license_name": "BSD-3-Clause",
         "FAIL_TO_PASS": ["test_a"],
         "PASS_TO_PASS": ["test_b"],
-        "patch": "must not be copied",
+        "patch": "diff --git a/src/a.py b/src/a.py\n",
         "install_config": {"log_parser": "parse_log_pytest", "test_cmd": "pytest -rA --color=no"},
     }
 
@@ -34,6 +34,7 @@ def test_build_input_joins_matching_task_and_allowlists_sensitive_source_fields(
         "test_command": "pytest -rA --color=no",
         "workdir": "/testbed",
         "license": "BSD-3-Clause",
+        "reference_patch": "diff --git a/src/a.py b/src/a.py\n",
     }
 
 
