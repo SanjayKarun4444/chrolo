@@ -88,6 +88,8 @@ pytest -q results/test_chrolo_regression.py
 
 Use `chrolo replay results/failure.json --oracle examples.langgraph_issue_agent:wrong_issue` to rerun it. A capture with a cassette replays wrapped model/tool calls offline. An input-only capture re-executes the graph and requires `--allow-live-side-effects`; its output labels that mode because unwrapped calls can still reach live services.
 
+For shell or CI checks that must confirm the original failure still reproduces, add `--require-failure` alongside `--oracle`. Chrolo then exits with an error when replay completes but the oracle returns false. Without this flag, replay reports `Original failure detected: yes/no` and keeps its existing completion exit behavior.
+
 Expected demo reduction: 5 events → 2 events (`search`, `cache`). The generated test *fails intentionally* on the vulnerable graph, and should pass after the graph's `choose` node is corrected.
 
 If LangGraph is not installed, you can exercise the same adapter interface against the included **test-only shim**:

@@ -167,3 +167,37 @@ def test_replay_recorded_error_does_not_print_trace_error_fields(monkeypatch, tm
     assert "details omitted" in output
     assert secret_type not in output
     assert secret_message not in output
+
+
+def test_replay_require_failure_turns_false_oracle_into_cli_error(monkeypatch, tmp_path, capsys):
+    from types import SimpleNamespace
+
+    from chrolo import cli
+
+    monkeypatch.setattr(cli, "_read_json", lambda _path: {"interactions": {}})
+    monkeypatch.setattr(cli, "validate_capture", lambda _capture: [])
+    monkeypatch.setattr(cli, "replay_recorded", lambda *_args: {"ok": True})
+    monkeypatch.setattr(cli, "resolve", lambda _target: lambda _result: False)
+
+    with pytest.raises(ValueError, match="Original failure did not recur"):
+        cli.replay_cmd(SimpleNamespace(
+            trace=tmp_path / "trace.json", allow_live_side_effects=False,
+            oracle="example:failure", require_failure=True,
+        ))
+
+    assert "Original failure detected: no" in capsys.readouterr().out
+
+
+def test_replay_require_failure_needs_oracle(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from chrolo import cli
+
+    monkeypatch.setattr(cli, "_read_json", lambda _path: {})
+    monkeypatch.setattr(cli, "validate_capture", lambda _capture: [])
+
+    with pytest.raises(ValueError, match="--require-failure needs --oracle"):
+        cli.replay_cmd(SimpleNamespace(
+            trace=tmp_path / "trace.json", allow_live_side_effects=False,
+            oracle=None, require_failure=True,
+        ))

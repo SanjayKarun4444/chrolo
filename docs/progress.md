@@ -2,7 +2,9 @@
 
 Checkpoint: 2026-11-03
 
-Latest CLI privacy update: `chrolo replay` classifies cassette mismatches without echoing the recorded target and reports recorded call errors without printing trace-provided exception type or message fields. Regression tests inject secret-like values and confirm they are absent from terminal output. Focused CLI/cassette tests: 25 passed; full suite: 140 passed. The mismatch-output fix is committed locally; the recorded-error hardening is pending a local commit. Docker task replay remains deferred at the user's request; phone visual QA is also still open.
+2026-11-04 replay workflow update: `chrolo replay --oracle ... --require-failure` now returns a CLI error if the original signature does not reproduce, while default replay exit behavior remains unchanged. The flag requires an oracle. README documents the CI/shell use case. CLI and graph-adapter integration tests: 22 passed; full suite: 142 passed. Local commit pending. Docker task replay and physical-phone QA remain open.
+
+Latest CLI privacy update: `chrolo replay` classifies cassette mismatches without echoing the recorded target and reports recorded call errors without printing trace-provided exception type or message fields. Regression tests inject secret-like values and confirm they are absent from terminal output. Focused CLI/cassette tests: 25 passed; full suite at that commit: 140 passed. Both privacy changes are committed locally. Docker task replay remains deferred at the user's request; phone visual QA is also still open.
 
 Real-agent corpus candidate: `nebius/SWE-rebench-openhands-trajectories` (CC BY 4.0), linked to `nebius/SWE-rebench`. Verified sample `PlasmaFAIR__sdf-xarray-24` is unresolved and joins to `swerebench/sweb.eval.x86_64.plasmafair_1776_sdf-xarray-24`, with 8 `FAIL_TO_PASS` tests, 2 `PASS_TO_PASS` controls, and repository license BSD-3-Clause. The sample has 185 messages and 92 tool calls. No Docker action replay or minimization has run; user said to leave Docker blocked.
 

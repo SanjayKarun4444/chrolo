@@ -130,6 +130,8 @@ def redact_cmd(args):
 def replay_cmd(args):
     capture = _read_json(args.trace)
     events = validate_capture(capture)
+    if getattr(args, "require_failure", False) and not args.oracle:
+        raise ValueError("--require-failure needs --oracle")
     cassette = capture.get("interactions")
     if cassette is None and not args.allow_live_side_effects:
         raise ValueError(
@@ -164,6 +166,8 @@ def replay_cmd(args):
         except Exception:
             raise ValueError("Failure oracle raised while checking replay result") from None
         print(f"Original failure detected: {'yes' if failed else 'no'}")
+        if getattr(args, "require_failure", False) and not failed:
+            raise ValueError("Original failure did not recur during replay")
 
 
 def _safe_replay_mismatch_reason(reason: str) -> str:
@@ -446,6 +450,10 @@ def main():
     replay.add_argument(
         "--allow-live-side-effects", action="store_true",
         help="Allow graph re-execution when no interaction cassette is present",
+    )
+    replay.add_argument(
+        "--require-failure", action="store_true",
+        help="Exit with an error when --oracle says the original failure did not recur",
     )
     replay.set_defaults(handler=replay_cmd)
     benchmark = command.add_parser("benchmark", help="Run synthetic replay and minimization reliability benchmarks")
