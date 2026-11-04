@@ -150,7 +150,7 @@ def replay_cmd(args):
                 f"({exc.recorded_type}); sensitive error text omitted"
             )
         else:
-            print(f"Replay failed: {exc}")
+            print(f"Replay failed at interaction {exc.sequence}: {_safe_replay_mismatch_reason(exc.reason)}")
         raise ValueError("Replay did not complete") from None
     print("Replay completed")
     if capture.get("outcome", {}).get("status") == "exception":
@@ -164,6 +164,27 @@ def replay_cmd(args):
         except Exception:
             raise ValueError("Failure oracle raised while checking replay result") from None
         print(f"Original failure detected: {'yes' if failed else 'no'}")
+
+
+def _safe_replay_mismatch_reason(reason: str) -> str:
+    """Return a useful mismatch category without echoing trace identity values."""
+    if reason.startswith("expected ") and reason.endswith(" boundary"):
+        return "boundary differs from the recorded interaction"
+    if reason.startswith("expected target "):
+        return "target differs from the recorded interaction"
+    if reason == "request differs from the recorded request":
+        return "request differs from the recorded interaction"
+    if reason == "context differs from the recorded context":
+        return "context differs from the recorded interaction"
+    if reason == "unexpected call; cassette is exhausted":
+        return "unexpected call after the cassette was exhausted"
+    if reason == "no matching recorded interaction remains in cassette":
+        return "no matching recorded interaction remains in the cassette"
+    if reason == "ambiguous repeated interaction while minimizing cassette":
+        return "repeated interaction is ambiguous during minimization"
+    if reason.endswith(" recorded interaction(s) were not consumed"):
+        return reason
+    return "interaction did not match the recorded cassette"
 
 
 def benchmark_cmd(args):

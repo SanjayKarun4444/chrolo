@@ -2,6 +2,8 @@
 
 Checkpoint: 2026-11-03
 
+Latest CLI privacy update: `chrolo replay` now classifies cassette mismatch reasons without echoing the recorded target, which can contain sensitive identifiers. A regression test injects a secret-like target and confirms it is absent from terminal output. Focused CLI/cassette tests: 24 passed; full suite: 139 passed. Local commit pending. Docker task replay remains deferred at the user's request; phone visual QA is also still open.
+
 Real-agent corpus candidate: `nebius/SWE-rebench-openhands-trajectories` (CC BY 4.0), linked to `nebius/SWE-rebench`. Verified sample `PlasmaFAIR__sdf-xarray-24` is unresolved and joins to `swerebench/sweb.eval.x86_64.plasmafair_1776_sdf-xarray-24`, with 8 `FAIL_TO_PASS` tests, 2 `PASS_TO_PASS` controls, and repository license BSD-3-Clause. The sample has 185 messages and 92 tool calls. No Docker action replay or minimization has run; user said to leave Docker blocked.
 
 Latest privacy hardening: the unauthenticated loopback Trace Desk rejects non-loopback `Host` headers to prevent DNS-rebinding pages from treating the local UI as their own origin. The targeted HTTP/TLS suite passed: 7 tests; the full suite passed: 117 tests.

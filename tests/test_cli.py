@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,3 +115,27 @@ def test_serve_cli_forwards_advertise_ip_to_trace_desk(monkeypatch):
     cli.main()
 
     assert calls == [(("0.0.0.0", 8765, None, None, None), {"advertise_ip": "100.71.4.2"})]
+
+
+def test_replay_mismatch_does_not_print_recorded_target(monkeypatch, tmp_path, capsys):
+    from types import SimpleNamespace
+
+    from chrolo import cli
+    from chrolo.cassette import ReplayMismatch
+
+    secret_target = "provider-token-never-print"
+    monkeypatch.setattr(cli, "_read_json", lambda _path: {"interactions": {}})
+    monkeypatch.setattr(cli, "validate_capture", lambda _capture: [])
+    monkeypatch.setattr(
+        cli, "replay_recorded",
+        lambda *_args: (_ for _ in ()).throw(ReplayMismatch(0, f"expected target {secret_target!r}")),
+    )
+
+    with pytest.raises(ValueError, match="Replay did not complete"):
+        cli.replay_cmd(SimpleNamespace(
+            trace=tmp_path / "trace.json", allow_live_side_effects=False, oracle=None,
+        ))
+
+    output = capsys.readouterr().out
+    assert "target differs from the recorded interaction" in output
+    assert secret_target not in output
