@@ -11,7 +11,11 @@ def test_build_input_joins_matching_task_and_allowlists_sensitive_source_fields(
     trace = {"rows": [{"row": {
         "instance_id": "org__repo-7",
         "repo": "org/repo",
-        "trajectory": [{"role": "assistant", "tool_calls": []}],
+        "trajectory": [{"role": "assistant", "tool_calls": [{
+            "function": {"name": "str_replace_editor", "arguments": json.dumps({
+                "command": "view", "path": "/workspace/org__repo-7/src/a.py",
+            })},
+        }]}],
         "model_patch": "must not be copied",
         "problem_statement": "must not be copied",
     }}]}
@@ -33,6 +37,7 @@ def test_build_input_joins_matching_task_and_allowlists_sensitive_source_fields(
         "pass_to_pass": ["test_b"],
         "test_command": "pytest -rA --color=no",
         "workdir": "/testbed",
+        "source_workspace": "/workspace/org__repo-7",
         "license": "BSD-3-Clause",
         "reference_patch": "diff --git a/src/a.py b/src/a.py\n",
     }

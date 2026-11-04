@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -7,6 +9,7 @@ from chrolo.core import parse_events
 from chrolo.openhands_docker import (
     OpenHandsDockerRunner,
     _CONTAINER_PROGRAM,
+    _RESULT_PATTERN,
     benchmark_openhands_trace,
     failure_oracle,
 )
@@ -39,6 +42,69 @@ def test_docker_invocation_is_fresh_networkless_and_resource_bounded():
     assert "--security-opt=no-new-privileges" in argv
     assert not any(part.startswith("--mount") for part in argv)
     assert argv[-3:] == ["python", "-c", argv[-1]]
+
+
+def test_container_editor_matches_openhands_create_unique_replace_insert_and_undo(tmp_path):
+    existing = tmp_path / "existing.txt"
+    existing.write_text("alpha\nbeta\n", encoding="utf-8")
+    duplicate = tmp_path / "duplicate.txt"
+    duplicate.write_text("alpha\nalpha\n", encoding="utf-8")
+    created = tmp_path / "created.txt"
+    mapped = tmp_path / "mapped.txt"
+    mapped.write_text("mapped old", encoding="utf-8")
+    actions = [
+        {"id": "create-existing", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "create", "path": str(existing), "file_text": "overwrite",
+        }}},
+        {"id": "replace", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "str_replace", "path": str(existing), "old_str": "beta", "new_str": "BETA",
+        }}},
+        {"id": "insert", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "insert", "path": str(existing), "insert_line": 1, "new_str": "middle",
+        }}},
+        {"id": "undo-insert", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "undo_edit", "path": str(existing),
+        }}},
+        {"id": "undo-replace", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "undo_edit", "path": str(existing),
+        }}},
+        {"id": "replace-ambiguous", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "str_replace", "path": str(duplicate), "old_str": "alpha", "new_str": "changed",
+        }}},
+        {"id": "create-new", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "create", "path": str(created), "file_text": "new file",
+        }}},
+        {"id": "map-workspace", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "str_replace", "path": "/workspace/repo/mapped.txt", "old_str": "mapped old", "new_str": "mapped new",
+        }}},
+    ]
+    test_command = [sys.executable, "-c", "import sys; print('FAILED '+sys.argv[1]+' - expected'); print('PASSED '+sys.argv[2])"]
+    request = {
+        "actions": actions,
+        "workdir": str(tmp_path),
+        "action_timeout": 5,
+        "test_timeout": 5,
+        "test_command": test_command,
+        "fail_to_pass": [FAIL],
+        "pass_to_pass": [CONTROL],
+        "result_pattern": _RESULT_PATTERN.pattern,
+        "source_workspace": "/workspace/repo",
+    }
+    completed = subprocess.run(
+        [sys.executable, "-c", _CONTAINER_PROGRAM],
+        input=json.dumps(request),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=True,
+    )
+
+    assert existing.read_text(encoding="utf-8") == "alpha\nbeta\n"
+    assert duplicate.read_text(encoding="utf-8") == "alpha\nalpha\n"
+    assert created.read_text(encoding="utf-8") == "new file"
+    assert mapped.read_text(encoding="utf-8") == "mapped new"
+    assert json.loads(completed.stdout)["statuses"] == {FAIL: "FAILED", CONTROL: "PASSED"}
 
 
 def test_runner_sends_only_candidate_actions_and_returns_task_test_statuses(monkeypatch):
@@ -103,8 +169,8 @@ def test_unsupported_editor_operations_fail_before_starting_docker(monkeypatch):
         raise AssertionError("Docker must not start for unsupported actions")
 
     monkeypatch.setattr("chrolo.openhands_docker.subprocess.run", fake_run)
-    events = parse_events([{"id": "insert", "kind": "str_replace_editor", "payload": {
-        "arguments": {"command": "insert", "path": "src/a.py"},
+    events = parse_events([{"id": "unknown", "kind": "str_replace_editor", "payload": {
+        "arguments": {"command": "unknown", "path": "src/a.py"},
     }}])
     with pytest.raises(ValueError, match="unsupported editor command"):
         _runner()(events)

@@ -28,6 +28,13 @@ from pathlib import Path
 
 request = json.load(sys.stdin)
 root = Path(request["workdir"]).resolve()
+edit_history = {}
+source_workspace = request.get("source_workspace")
+
+def map_workspace_path(value):
+    if isinstance(source_workspace, str) and (value == source_workspace or value.startswith(source_workspace + "/")):
+        return str(root) + value[len(source_workspace):]
+    return value
 
 reference_patch = request.get("reference_patch")
 if reference_patch is not None:
@@ -54,6 +61,8 @@ for event in request["actions"]:
         command = args.get("command")
         if not isinstance(command, str):
             raise ValueError("execute_bash command must be a string")
+        if isinstance(source_workspace, str):
+            command = command.replace(source_workspace, str(root))
         process = subprocess.Popen(command, shell=True, executable="/bin/bash", cwd=root,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    start_new_session=True)
@@ -67,19 +76,38 @@ for event in request["actions"]:
             process.wait()
     elif kind == "str_replace_editor":
         command = args.get("command")
-        path = in_workspace(args.get("path", ""))
+        path = in_workspace(map_workspace_path(args.get("path", "")))
         try:
             if command == "view":
                 continue
             if command == "create":
-                path.parent.mkdir(parents=True, exist_ok=True)
+                if path.exists() or not isinstance(args.get("file_text"), str):
+                    continue
+                if not path.parent.is_dir():
+                    continue
                 path.write_text(args["file_text"], encoding="utf-8")
             elif command == "str_replace":
-                source = path.read_text(encoding="utf-8")
-                old = args["old_str"]
-                if old not in source:
+                source = path.read_text(encoding="utf-8").expandtabs()
+                old = args["old_str"].expandtabs()
+                new = args.get("new_str", "")
+                if not isinstance(new, str) or source.count(old) != 1:
                     continue
-                path.write_text(source.replace(old, args["new_str"]), encoding="utf-8")
+                edit_history.setdefault(str(path), []).append(source)
+                path.write_text(source.replace(old, new.expandtabs()), encoding="utf-8")
+            elif command == "insert":
+                source = path.read_text(encoding="utf-8").expandtabs()
+                insert_line = args.get("insert_line")
+                new = args.get("new_str")
+                lines = source.split("\n")
+                if type(insert_line) is not int or not isinstance(new, str) or not 0 <= insert_line <= len(lines):
+                    continue
+                edit_history.setdefault(str(path), []).append(source)
+                path.write_text("\n".join(lines[:insert_line] + new.expandtabs().split("\n") + lines[insert_line:]), encoding="utf-8")
+            elif command == "undo_edit":
+                history = edit_history.get(str(path), [])
+                if not history:
+                    continue
+                path.write_text(history.pop(), encoding="utf-8")
             else:
                 raise ValueError("unsupported str_replace_editor command")
         except (OSError, KeyError, UnicodeError):
@@ -122,6 +150,7 @@ class OpenHandsDockerRunner:
         cpus: str = "2",
         pids_limit: int = 256,
         reference_patch: str | None = None,
+        source_workspace: str | None = None,
     ) -> None:
         if not isinstance(image, str) or not image.strip():
             raise ValueError("Docker image must be a non-empty string")
@@ -139,6 +168,8 @@ class OpenHandsDockerRunner:
             raise ValueError("Docker executable must be a non-empty string")
         if reference_patch is not None and not isinstance(reference_patch, str):
             raise ValueError("reference_patch must be a string")
+        if source_workspace is not None and (not isinstance(source_workspace, str) or not source_workspace.startswith("/")):
+            raise ValueError("source_workspace must be an absolute OpenHands path")
         for name, value in (("action_timeout", action_timeout), ("test_timeout", test_timeout), ("total_timeout", total_timeout), ("pids_limit", pids_limit)):
             if type(value) is not int or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
@@ -159,6 +190,7 @@ class OpenHandsDockerRunner:
         self.cpus = cpus
         self.pids_limit = pids_limit
         self.reference_patch = reference_patch
+        self.source_workspace = source_workspace
 
     def docker_argv(self, container_name: str | None = None) -> list[str]:
         """Build the bounded Docker invocation, useful for audit and testing."""
@@ -188,12 +220,17 @@ class OpenHandsDockerRunner:
                 required = {
                     "view": (),
                     "create": ("file_text",),
-                    "str_replace": ("old_str", "new_str"),
+                    "str_replace": ("old_str",),
+                    "insert": ("insert_line", "new_str"),
+                    "undo_edit": (),
                 }
                 if not isinstance(command, str) or command not in required:
                     raise ValueError(f"OpenHands action {event.id!r} uses unsupported editor command")
                 if not isinstance(arguments.get("path"), str) or any(
-                    not isinstance(arguments.get(key), str) for key in required[command]
+                    (
+                        type(arguments.get(key)) is not int if key == "insert_line"
+                        else not isinstance(arguments.get(key), str)
+                    ) for key in required[command]
                 ):
                     raise ValueError(f"OpenHands action {event.id!r} has invalid editor arguments")
             else:
@@ -208,6 +245,7 @@ class OpenHandsDockerRunner:
             "pass_to_pass": self.pass_to_pass,
             "result_pattern": _RESULT_PATTERN.pattern,
             "reference_patch": self.reference_patch,
+            "source_workspace": self.source_workspace,
         }
         container_name = f"chrolo-replay-{uuid.uuid4().hex}"
         argv = self.docker_argv(container_name)
@@ -307,7 +345,7 @@ def benchmark_openhands_trace(
     runner_options = {key: task[key] for key in (
         "image", "fail_to_pass", "pass_to_pass", "test_command", "workdir",
         "docker_executable", "action_timeout", "test_timeout", "total_timeout",
-        "memory", "cpus", "pids_limit",
+        "memory", "cpus", "pids_limit", "source_workspace",
     ) if key in task}
     runner = runner_factory(**runner_options)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,19 @@ def build_input(trace_source: dict[str, Any], task_row: dict[str, Any]) -> dict[
     # Allowlist runner inputs and the official patch for the paired fix
     # intervention. Prompts, model output, and task description are unnecessary.
     row = {"instance_id": instance_id, "repo": trace.get("repo"), "trajectory": trajectory}
+    editor_paths = []
+    for message in trajectory:
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            if function.get("name") != "str_replace_editor":
+                continue
+            try:
+                arguments = json.loads(function.get("arguments", ""))
+            except (TypeError, json.JSONDecodeError):
+                continue
+            path = arguments.get("path") if isinstance(arguments, dict) else None
+            if isinstance(path, str) and path.startswith("/workspace/"):
+                editor_paths.append(path)
     task = {
         "image": image,
         "fail_to_pass": fail_to_pass,
@@ -55,6 +69,15 @@ def build_input(trace_source: dict[str, Any], task_row: dict[str, Any]) -> dict[
         "test_command": test_command,
         "workdir": "/testbed",
     }
+    if editor_paths:
+        source_roots = {
+            posixpath.join("/workspace", posixpath.normpath(path).split("/")[2])
+            for path in editor_paths if len(posixpath.normpath(path).split("/")) >= 3
+        }
+        if len(source_roots) != 1:
+            raise ValueError("could not determine one OpenHands repository workspace from editor paths")
+        source_workspace = source_roots.pop()
+        task["source_workspace"] = source_workspace
     if isinstance(task_row.get("patch"), str) and task_row["patch"].strip():
         task["reference_patch"] = task_row["patch"]
     if isinstance(task_row.get("license_name"), str):

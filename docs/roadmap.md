@@ -230,7 +230,7 @@ Phone visual QA remains outstanding. HTTP/TLS integration tests and responsive-l
 
 ## Remaining delivery order
 
-1. Execute `chrolo benchmark-openhands` against the joined image's `FAIL_TO_PASS`/`PASS_TO_PASS` tests and confirm task-image replay behavior. The input builder, benchmark orchestration, and isolated runner are now wired and unit-tested; actual task-image replay is still pending. The runner handles the sample's `view`, `create`, and `str_replace` editor calls and rejects other editor operations.
+1. Execute `chrolo benchmark-openhands` against the joined image's `FAIL_TO_PASS`/`PASS_TO_PASS` tests and confirm task-image replay behavior. The input builder, benchmark orchestration, workspace-path mapping, and isolated runner are now wired and unit-tested; actual task-image replay is still pending.
 2. Run repeated minimization and the repeated reference-patch intervention on that corpus; the CLI now implements both, but Docker task-image validation remains outstanding. Keep results separate from synthetic and recorded-trace differential scores.
 3. Complete the Trace Desk phone visual check through a permitted preview route, including the remote TLS/VPN setup.
 4. Publish the local commits to the confirmed repository so the corrected CI workflow executes on its Python matrix.
