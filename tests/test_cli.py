@@ -121,7 +121,7 @@ def test_replay_mismatch_does_not_print_recorded_target(monkeypatch, tmp_path, c
     from types import SimpleNamespace
 
     from chrolo import cli
-    from chrolo.cassette import ReplayMismatch
+    from chrolo.cassette import RecordedCallError, ReplayMismatch
 
     secret_target = "provider-token-never-print"
     monkeypatch.setattr(cli, "_read_json", lambda _path: {"interactions": {}})
@@ -139,3 +139,31 @@ def test_replay_mismatch_does_not_print_recorded_target(monkeypatch, tmp_path, c
     output = capsys.readouterr().out
     assert "target differs from the recorded interaction" in output
     assert secret_target not in output
+
+
+def test_replay_recorded_error_does_not_print_trace_error_fields(monkeypatch, tmp_path, capsys):
+    from types import SimpleNamespace
+
+    from chrolo import cli
+    from chrolo.cassette import RecordedCallError
+
+    secret_type = "provider-key-should-not-print"
+    secret_message = "bearer-value-should-not-print"
+    monkeypatch.setattr(cli, "_read_json", lambda _path: {"interactions": {}})
+    monkeypatch.setattr(cli, "validate_capture", lambda _capture: [])
+
+    def fail_replay(*_args):
+        raise RecordedCallError(0, "model", "ignored-target", secret_type, secret_message)
+
+    monkeypatch.setattr(cli, "replay_recorded", fail_replay)
+
+    with pytest.raises(ValueError, match="Replay did not complete"):
+        cli.replay_cmd(SimpleNamespace(
+            trace=tmp_path / "trace.json", allow_live_side_effects=False, oracle=None,
+        ))
+
+    output = capsys.readouterr().out
+    assert "recorded model error" in output
+    assert "details omitted" in output
+    assert secret_type not in output
+    assert secret_message not in output

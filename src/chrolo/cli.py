@@ -147,7 +147,7 @@ def replay_cmd(args):
         if isinstance(exc, RecordedCallError):
             print(
                 f"Replay failed at interaction {exc.sequence}: recorded {exc.boundary} error "
-                f"({exc.recorded_type}); sensitive error text omitted"
+                "(details omitted; inspect the local trace if needed)"
             )
         else:
             print(f"Replay failed at interaction {exc.sequence}: {_safe_replay_mismatch_reason(exc.reason)}")
