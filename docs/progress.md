@@ -1,8 +1,10 @@
 # Chrolo progress checkpoint
 
-Checkpoint: 2026-11-03
+Checkpoint: 2026-11-04
 
-2026-11-04 replay workflow update: `chrolo replay --oracle ... --require-failure` now returns a CLI error if the original signature does not reproduce, while default replay exit behavior remains unchanged. The flag requires an oracle. README documents the CI/shell use case. CLI and graph-adapter integration tests: 22 passed; full suite: 142 passed. Local commit pending. Docker task replay and physical-phone QA remain open.
+2026-11-04 mobile QA checkpoint: corrected conflicting older notes: responsive browser QA at 390px/320px was completed on 2026-11-03; physical-phone VPN/TLS QA remains open. Current Work settings disable browser access, so the local preview was not re-opened. README now gives the phone connection sequence, including matching and trusting the certificate before visiting the server.
+
+2026-11-04 replay workflow update: `chrolo replay --oracle ... --require-failure` now returns a CLI error if the original signature does not reproduce, while default replay exit behavior remains unchanged. The flag requires an oracle. README documents the CI/shell use case. CLI and graph-adapter integration tests: 22 passed; full suite: 142 passed. Committed locally as `00654c8`. Docker task replay and physical-phone QA remain open.
 
 Latest CLI privacy update: `chrolo replay` classifies cassette mismatches without echoing the recorded target and reports recorded call errors without printing trace-provided exception type or message fields. Regression tests inject secret-like values and confirm they are absent from terminal output. Focused CLI/cassette tests: 25 passed; full suite at that commit: 140 passed. Both privacy changes are committed locally. Docker task replay remains deferred at the user's request; phone visual QA is also still open.
 
@@ -38,7 +40,7 @@ This note preserves the current state and resume point for the Chrolo roadmap. T
 ## Still open
 
 1. **Real-agent task-level reliability benchmark:** A public candidate is now identified: SWE-rebench OpenHands trajectories are CC BY 4.0 and include real GitHub issue runs; one unresolved trace was joined to its Docker image and 8 fail-to-pass plus 2 pass-to-pass tests. Action replay and repeated Chrolo minimization have not run because Docker is blocked at the user's request.
-2. **Phone visual QA:** HTTP/TLS integration tests pass, but a physical-phone or browser visual check has not been completed. The saved desktop browser policy rejected access to the local `127.0.0.1` preview even after the user approved it; do not retry through another browser or an indirect preview path. Resume only if a permitted preview method becomes available.
+2. **Physical-phone visual QA:** Responsive local browser preview was completed at 390px and 320px on 2026-11-03. The page had no horizontal overflow at 320px, all five buttons measured 46px high, and scan/redaction/clear flows were exercised with a synthetic trace. Physical-phone QA over the private VPN and trusted HTTPS certificate remains open. On 2026-11-04, the in-app browser inventory reported local browser use disabled in Work settings; no alternate browser or indirect preview route was attempted.
 3. **Provider coverage:** OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages now have buffered synchronous adapters with JSON-safe replay and real SDK response fixtures. Async, streaming, Realtime, other SDKs, and arbitrary unwrapped side effects remain outside coverage. Keep M2 experimental.
 4. **Benchmark tradeoff:** AgentTelemetry results show signal preservation, but no reduction advantage over the naïve baseline (same 74.23% mean shrink, with 21.33 vs 14.77 mean candidate checks).
 

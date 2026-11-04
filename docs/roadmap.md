@@ -226,12 +226,12 @@ The provider adapters currently cover buffered synchronous OpenAI Responses, Ope
 
 The checked-in synthetic scenarios measure repeated reproduction, signature preservation, shrink, candidate checks, cassette pruning and consumption, replay timing, fixture size, and sensitivity to paired fixes/controls. Their results show signal preservation but no reduction advantage over the naïve baseline in AgentTelemetry or the task-oracle suite. Do not claim real-agent reliability or M2 readiness until the actual execution boundaries, task oracle, and supported framework/provider combinations are independently exercised.
 
-Phone visual QA remains outstanding. HTTP/TLS integration tests and responsive-layout assertions pass, but a permitted visual preview or physical-phone check is still needed. The current GitHub origin also returns `Repository not found`, so local commits and the CI workflow have not been published or run by GitHub Actions.
+Responsive browser preview QA has been completed at 390px and 320px, including scan, redaction-path selection, and clear-page-state checks on a synthetic trace. Physical-phone QA over the private VPN and with a trusted TLS certificate remains outstanding; the in-app browser is currently disabled by Work settings, so use only a permitted route if that changes. HTTP/TLS integration tests and responsive-layout assertions pass. The current GitHub origin also returns `Repository not found`, so local commits and the CI workflow have not been published or run by GitHub Actions.
 
 ## Remaining delivery order
 
 1. Execute `chrolo benchmark-openhands` against the joined image's `FAIL_TO_PASS`/`PASS_TO_PASS` tests and confirm task-image replay behavior. The input builder, benchmark orchestration, workspace-path mapping, and isolated runner are now wired and unit-tested; actual task-image replay is still pending.
 2. Run repeated minimization and the repeated reference-patch intervention on that corpus; the CLI now implements both, but Docker task-image validation remains outstanding. Keep results separate from synthetic and recorded-trace differential scores.
-3. Complete the Trace Desk phone visual check through a permitted preview route, including the remote TLS/VPN setup.
+3. Complete the Trace Desk physical-phone visual check, including trusted TLS/VPN setup. The local responsive browser preview is already documented in `docs/progress.md`.
 4. Publish the local commits to the confirmed repository so the corrected CI workflow executes on its Python matrix.
 5. Reassess M2's experimental status after provider, framework, and real-agent runner coverage has evidence at the required scope.
