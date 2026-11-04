@@ -52,6 +52,8 @@ def test_container_editor_matches_openhands_create_unique_replace_insert_and_und
     created = tmp_path / "created.txt"
     mapped = tmp_path / "mapped.txt"
     mapped.write_text("mapped old", encoding="utf-8")
+    patch_target = tmp_path / "patchme.txt"
+    patch_target.write_text("unfixed\n", encoding="utf-8")
     actions = [
         {"id": "create-existing", "kind": "str_replace_editor", "payload": {"arguments": {
             "command": "create", "path": str(existing), "file_text": "overwrite",
@@ -89,6 +91,14 @@ def test_container_editor_matches_openhands_create_unique_replace_insert_and_und
         "pass_to_pass": [CONTROL],
         "result_pattern": _RESULT_PATTERN.pattern,
         "source_workspace": "/workspace/repo",
+        "reference_patch": (
+            "diff --git a/patchme.txt b/patchme.txt\n"
+            "--- a/patchme.txt\n"
+            "+++ b/patchme.txt\n"
+            "@@ -1 +1 @@\n"
+            "-unfixed\n"
+            "+fixed\n"
+        ),
     }
     completed = subprocess.run(
         [sys.executable, "-c", _CONTAINER_PROGRAM],
@@ -104,6 +114,7 @@ def test_container_editor_matches_openhands_create_unique_replace_insert_and_und
     assert duplicate.read_text(encoding="utf-8") == "alpha\nalpha\n"
     assert created.read_text(encoding="utf-8") == "new file"
     assert mapped.read_text(encoding="utf-8") == "mapped new"
+    assert patch_target.read_text(encoding="utf-8") == "fixed\n"
     assert json.loads(completed.stdout)["statuses"] == {FAIL: "FAILED", CONTROL: "PASSED"}
 
 
