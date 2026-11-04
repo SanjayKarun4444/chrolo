@@ -14,7 +14,8 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .core import Event
+from .core import Event, minimize, parse_events
+from .openhands import extract_actions
 
 
 _RESULT_PATTERN = re.compile(r"^(PASSED|FAILED|ERROR|SKIPPED)\s+(.+?)(?:\s+-\s+.*)?$")
@@ -192,11 +193,8 @@ class OpenHandsDockerRunner:
             "test_command": self.test_command,
             "fail_to_pass": self.fail_to_pass,
             "pass_to_pass": self.pass_to_pass,
-            "result_pattern": _RESULT_PATTERN,
+            "result_pattern": _RESULT_PATTERN.pattern,
         }
-        # Regex objects are not JSON serializable; transmit the equivalent
-        # pattern string and compile it in the container process.
-        request["result_pattern"] = _RESULT_PATTERN.pattern
         container_name = f"chrolo-replay-{uuid.uuid4().hex}"
         argv = self.docker_argv(container_name)
         try:
@@ -266,3 +264,84 @@ def failure_oracle(
         return actual == expected and passed == controls
 
     return oracle
+
+
+def benchmark_openhands_trace(
+    row: Mapping[str, Any],
+    task: Mapping[str, Any],
+    *,
+    repeat: int = 5,
+    max_checks: int = 1000,
+    runner_factory=OpenHandsDockerRunner,
+) -> dict[str, Any]:
+    """Replay and minimize one recorded trace against its SWE-rebench tests.
+
+    ``runner_factory`` is injectable for unit tests. The default starts Docker;
+    callers should treat the emitted reduced event payloads as sensitive data.
+    """
+    if type(repeat) is not int or repeat < 1:
+        raise ValueError("repeat must be a positive integer")
+    if type(max_checks) is not int or max_checks < 1:
+        raise ValueError("max_checks must be a positive integer")
+    if not isinstance(task, Mapping):
+        raise ValueError("task metadata must be an object")
+    required = ("image", "fail_to_pass", "pass_to_pass", "test_command")
+    missing = [name for name in required if name not in task]
+    if missing:
+        raise ValueError("task metadata is missing: " + ", ".join(missing))
+    events = parse_events(extract_actions(row))
+    runner_options = {key: task[key] for key in (
+        "image", "fail_to_pass", "pass_to_pass", "test_command", "workdir",
+        "docker_executable", "action_timeout", "test_timeout", "total_timeout",
+        "memory", "cpus", "pids_limit",
+    ) if key in task}
+    runner = runner_factory(**runner_options)
+
+    baseline = runner(list(events))
+    if not isinstance(baseline, Mapping):
+        raise RuntimeError("OpenHands baseline runner returned invalid result data")
+    expected_failures = baseline.get("failed_to_pass")
+    expected_controls = baseline.get("passed_to_pass")
+    if not isinstance(expected_failures, list) or not expected_failures:
+        raise ValueError("Baseline did not reproduce a FAIL_TO_PASS failure")
+    if set(expected_controls or ()) != set(task["pass_to_pass"]):
+        raise ValueError("Baseline failed one or more PASS_TO_PASS controls")
+    oracle = failure_oracle(expected_failures, task["pass_to_pass"])
+
+    repeats = []
+    for _ in range(repeat):
+        try:
+            repeats.append(bool(oracle(runner(list(events)))))
+        except Exception:
+            repeats.append(False)
+
+    result = minimize(events, runner, oracle, max_checks=max_checks)
+    try:
+        minimized_result = runner(list(result.events))
+        preserved = bool(oracle(minimized_result))
+    except Exception:
+        minimized_result = None
+        preserved = False
+    original_count = len(events)
+    minimized_count = len(result.events)
+    return {
+        "format": "chrolo.openhands-benchmark.v1",
+        "instance_id": row.get("instance_id"),
+        "repo": row.get("repo"),
+        "image": task["image"],
+        "repetitions": repeat,
+        "reproduction_rate": sum(repeats) / repeat,
+        "baseline_failed_to_pass": sorted(expected_failures),
+        "baseline_passed_to_pass": sorted(expected_controls),
+        "failure_signature_preserved": preserved,
+        "minimized_result": minimized_result,
+        "original_events": original_count,
+        "remaining_events": minimized_count,
+        "shrink_percent": round(100 * (original_count - minimized_count) / original_count, 2) if original_count else 0.0,
+        "checks": result.checks,
+        "one_minimal_under_tested_cascade_deletions": result.one_minimal,
+        "accepted_deletions": result.accepted_deletions,
+        "candidate_rejections": result.candidate_rejections,
+        "events": [event.to_dict() for event in result.events],
+        "limitation": "Recorded actions and their arguments are untrusted data; this benchmark does not validate the agent's hidden reasoning or unrecorded side effects.",
+    }

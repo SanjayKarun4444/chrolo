@@ -20,6 +20,7 @@ from .adapters_langgraph import (
 )
 from .cassette import RecordedCallError, ReplayMismatch
 from .benchmark import run_benchmarks, run_dataset
+from .openhands_docker import benchmark_openhands_trace
 from .web import serve as serve_web
 from .safety import filter_trace, redact_trace, scan_trace, summarize_trace
 from .trajectory import infer_dependencies, run_trajectory
@@ -172,6 +173,27 @@ def benchmark_cmd(args):
     else:
         report = run_benchmarks(repeat=args.repeat)
     print(json.dumps(report, indent=2, ensure_ascii=False))
+
+
+def benchmark_openhands_cmd(args):
+    source = _read_json(args.input)
+    row = source.get("row")
+    task = source.get("task")
+    if row is None:
+        raise ValueError("input must contain a 'row' OpenHands trajectory object")
+    if not isinstance(task, dict):
+        raise ValueError("input must contain a 'task' object with image and test metadata")
+    report = benchmark_openhands_trace(
+        row, task, repeat=args.repeat, max_checks=args.max_checks,
+    )
+    _write_json(args.output, report)
+    print(
+        f"OpenHands {report.get('instance_id')}: "
+        f"{report['original_events']} -> {report['remaining_events']} actions; "
+        f"reproduction {report['reproduction_rate']:.0%}; "
+        f"failure preserved: {'yes' if report['failure_signature_preserved'] else 'no'}"
+    )
+    print(f"Report and reduced action payloads (may contain secrets): {args.output}")
 
 
 def serve_cmd(args):
@@ -407,6 +429,15 @@ def main():
     benchmark.add_argument("--repeat", type=int, default=20, help="Repeated runs per reliability scenario")
     benchmark.add_argument("--dataset", type=Path, help="Evaluate a reviewed chrolo.benchmark.dataset.v1 JSON dataset")
     benchmark.set_defaults(handler=benchmark_cmd)
+    openhands_benchmark = command.add_parser(
+        "benchmark-openhands",
+        help="Replay and minimize one OpenHands trace in fresh isolated Docker task containers",
+    )
+    openhands_benchmark.add_argument("input", type=Path, help="JSON object with 'row' trajectory and 'task' oracle metadata")
+    openhands_benchmark.add_argument("--repeat", type=int, default=5, help="Additional full-trace reproduction runs")
+    openhands_benchmark.add_argument("--max-checks", type=int, default=1000, help="Maximum minimizer run/oracle checks")
+    openhands_benchmark.add_argument("--output", type=Path, default=Path("openhands-benchmark.json"))
+    openhands_benchmark.set_defaults(handler=benchmark_openhands_cmd)
     serve = command.add_parser("serve", help="Open the responsive local trace inspection and sanitization UI")
     serve.add_argument("--host", default="127.0.0.1", help="Bind address; use 0.0.0.0 for remote network access")
     serve.add_argument("--port", type=int, default=8765)

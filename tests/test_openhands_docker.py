@@ -4,7 +4,12 @@ from types import SimpleNamespace
 import pytest
 
 from chrolo.core import parse_events
-from chrolo.openhands_docker import OpenHandsDockerRunner, _CONTAINER_PROGRAM, failure_oracle
+from chrolo.openhands_docker import (
+    OpenHandsDockerRunner,
+    _CONTAINER_PROGRAM,
+    benchmark_openhands_trace,
+    failure_oracle,
+)
 
 
 FAIL = "tests/test_issue.py::test_fixed_behavior"
@@ -104,6 +109,68 @@ def test_unsupported_editor_operations_fail_before_starting_docker(monkeypatch):
     with pytest.raises(ValueError, match="unsupported editor command"):
         _runner()(events)
     assert called is False
+
+
+def test_benchmark_orchestrates_repetition_exact_oracle_and_minimization():
+    class FakeRunner:
+        def __init__(self, **kwargs):
+            assert kwargs["image"] == "example/task:latest"
+
+        def __call__(self, events):
+            broken = any(event.payload["arguments"].get("marker") == "bug" for event in events)
+            return {
+                "failed_to_pass": [FAIL] if broken else [],
+                "passed_to_pass": [CONTROL],
+                "statuses": {FAIL: "FAILED" if broken else "PASSED", CONTROL: "PASSED"},
+            }
+
+    def tool_call(name, args):
+        return {"function": {"name": name, "arguments": json.dumps(args)}}
+
+    row = {
+        "instance_id": "sample__repo-1",
+        "repo": "sample/repo",
+        "trajectory": [{"tool_calls": [
+            tool_call("execute_bash", {"command": "echo noise"}),
+            tool_call("execute_bash", {"command": "echo bug", "marker": "bug"}),
+            tool_call("execute_bash", {"command": "echo tail"}),
+        ]}],
+    }
+    task = {
+        "image": "example/task:latest",
+        "fail_to_pass": [FAIL],
+        "pass_to_pass": [CONTROL],
+        "test_command": "pytest -rA --color=no",
+    }
+
+    report = benchmark_openhands_trace(row, task, repeat=3, runner_factory=FakeRunner)
+    assert report["reproduction_rate"] == 1
+    assert report["failure_signature_preserved"] is True
+    assert report["original_events"] == 3
+    assert report["remaining_events"] == 1
+    assert report["one_minimal_under_tested_cascade_deletions"] is True
+    assert [event["id"] for event in report["events"]] == ["action-0001"]
+
+
+def test_benchmark_requires_a_baseline_failure_and_passing_controls():
+    class PassingRunner:
+        def __init__(self, **kwargs):
+            pass
+
+        def __call__(self, events):
+            return {"failed_to_pass": [], "passed_to_pass": [CONTROL]}
+
+    row = {"trajectory": [{"tool_calls": [{
+        "function": {"name": "execute_bash", "arguments": '{"command":"true"}'},
+    }]}]}
+    task = {
+        "image": "example/task:latest",
+        "fail_to_pass": [FAIL],
+        "pass_to_pass": [CONTROL],
+        "test_command": "pytest",
+    }
+    with pytest.raises(ValueError, match="did not reproduce"):
+        benchmark_openhands_trace(row, task, runner_factory=PassingRunner)
 
 
 @pytest.mark.parametrize("options", [

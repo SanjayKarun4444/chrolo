@@ -208,6 +208,20 @@ For reviewed, labeled cases, `chrolo benchmark --dataset benchmarks.json` compar
 
 `examples/task_oracle_dataset.json` adds three synthetic executable task failures: routing a ticket to the wrong team, charging an already-paid invoice again, and deleting a protected file. Its runner executes retained tool calls against fresh in-memory task state, resolves explicit outputs from earlier tool calls, and checks an exact task-state failure signature. Run it with `python -m chrolo benchmark --dataset examples/task_oracle_dataset.json --repeat 20`. The fixed runners model a correction and must clear the original signature. These are deterministic reference tasks, not recordings from production agents or external services.
 
+For one OpenHands trajectory joined to SWE-rebench task tests, build the input and run the dedicated fresh-container benchmark:
+
+```powershell
+python benchmarks/build_openhands_input.py `
+  --trace-json results/openhands-first-row.json `
+  --tasks-parquet results/swerebench-filtered.parquet `
+  --output results/openhands-benchmark-input.json
+python -m chrolo benchmark-openhands results/openhands-benchmark-input.json `
+  --repeat 5 --output results/openhands-benchmark.json
+python -m chrolo scan results/openhands-benchmark.json
+```
+
+The input builder requires `pyarrow`; Chrolo's runtime does not. Each candidate uses a new Docker task container with networking disabled. The JSON input and report contain recorded shell/editor arguments and can contain secrets; keep them local and scan before sharing. The current runner supports the sample's editor `view`, `create`, and `str_replace` commands. The command is unit-tested with a mocked runner, but its task-image behavior has not yet been validated; do not count it as real-agent benchmark evidence until that run and a verified fix intervention succeed.
+
 For a mobile-friendly local trace desk, run `chrolo serve` and open the printed address. It can inspect, scan for likely secrets, redact, and filter uploaded JSON traces without executing graph code or saving uploads on the server. Selecting a different file clears the previous summary and scan findings; **Clear data from this page** removes the selected file, loaded trace, findings, and path inputs. It also prevents an outstanding response from repopulating cleared results. To access it from a phone, bind to a trusted private network and use HTTPS with a certificate trusted by your devices:
 
 ```bash
