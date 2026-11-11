@@ -1,0 +1,8 @@
+{
+  "initial_state": {},
+  "events": [
+    {"id": "diagnostic", "kind": "probe", "payload": {}},
+    {"id": "select", "kind": "trigger", "payload": {}},
+    {"id": "note", "kind": "annotation", "payload": {}}
+  ]
+}
