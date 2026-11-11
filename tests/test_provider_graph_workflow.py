@@ -17,10 +17,10 @@ from chrolo.core import parse_events
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture(params=["openai", "anthropic"])
+@pytest.fixture(params=["openai", "openai_chat", "anthropic"])
 def workflow(monkeypatch, request):
     pytest.importorskip("langgraph")
-    pytest.importorskip(request.param)
+    pytest.importorskip("openai" if request.param.startswith("openai") else request.param)
     workflow = importlib.import_module("examples." + request.param + "_langgraph_regression")
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
 
@@ -52,6 +52,12 @@ def test_sdk_graph_cli_to_generated_regression_has_no_replay_callbacks(tmp_path,
         block = model_result["response"]["content"][1]
         assert block == {"type": "tool_use", "id": "toolu_fixture", "name": "fetch_ticket", "input": {"ticket_id": 42}}
         assert model_result["output_text"] == "Fetching ticket."
+    elif "openai_chat" in target:
+        block = model_result["response"]["choices"][0]["message"]["tool_calls"][0]
+        assert block["type"] == "function" and block["id"] == "lookup_42"
+        assert block["function"]["name"] == "fetch_ticket"
+        assert json.loads(block["function"]["arguments"]) == {"ticket_id": 42}
+        assert model_result["output_text"] is None
     else:
         block = model_result["response"]["output"][0]
         assert block["type"] == "function_call" and block["call_id"] == "lookup_42"
@@ -103,7 +109,7 @@ def test_provider_graph_replay_rejects_corrupt_boundaries_without_fallback(workf
     recorded_counts = workflow.CALLS.copy()
     calls = capture["interactions"]["interactions"]
     if mutation == "mismatch":
-        if "anthropic" in workflow.__name__:
+        if "anthropic" in workflow.__name__ or "openai_chat" in workflow.__name__:
             calls[1]["request"]["messages"][0]["content"] = "different request"
         else:
             calls[1]["request"]["input"] = "different request"
@@ -119,16 +125,18 @@ def test_provider_graph_replay_rejects_corrupt_boundaries_without_fallback(workf
 
 
 def test_provider_recording_cannot_be_replayed_through_a_different_provider(workflow):
-    other_sdk = "openai" if "anthropic" in workflow.__name__ else "anthropic"
-    pytest.importorskip(other_sdk)
-    other = importlib.import_module("examples." + other_sdk + "_langgraph_regression")
-    other.reset_calls()
     source = json.loads((ROOT / "examples/openai_langgraph_input.json").read_text())
     capture = capture_graph(workflow.build_graph, source["initial_state"], parse_events(source["events"]),
                             graph_target=workflow.__name__ + ":build_graph", record_interactions=True)
     recorded_counts = workflow.CALLS.copy()
-    capture["graph"] = other.__name__ + ":build_graph"
-    with pytest.raises(ReplayMismatch):
-        replay_recorded(capture)
-    assert workflow.CALLS == recorded_counts
-    assert not any(other.CALLS.values())
+    for other_name in ["openai", "openai_chat", "anthropic"]:
+        if workflow.__name__ == "examples." + other_name + "_langgraph_regression":
+            continue
+        pytest.importorskip("openai" if other_name.startswith("openai") else other_name)
+        other = importlib.import_module("examples." + other_name + "_langgraph_regression")
+        other.reset_calls()
+        capture["graph"] = other.__name__ + ":build_graph"
+        with pytest.raises(ReplayMismatch):
+            replay_recorded(capture)
+        assert workflow.CALLS == recorded_counts
+        assert not any(other.CALLS.values())

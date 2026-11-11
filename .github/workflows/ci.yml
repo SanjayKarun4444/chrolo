@@ -40,3 +40,7 @@ jobs:
             --test "$RUNNER_TEMP/test_chrolo_regression.py"
           test -s "$RUNNER_TEMP/minimal.json"
           test -s "$RUNNER_TEMP/test_chrolo_regression.py"
+      - name: Check installed-wheel capture-to-regression workflow
+        run: |
+          .wheel-smoke/bin/python -m pip install 'pytest>=8,<10'
+          .wheel-smoke/bin/python benchmarks/package_workflow_smoke.py --output-dir "$RUNNER_TEMP/packaged-workflow"

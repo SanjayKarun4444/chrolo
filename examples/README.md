@@ -6,6 +6,7 @@
 - `test_generated_regression.py`: sample M0 regression test; intentionally fails until the bug is fixed.
 - `openai_langgraph_input.json` + `openai_langgraph_regression.py`: installed OpenAI Responses SDK and real LangGraph with local HTTP/tool fixtures, exercising the complete capture/replay/minimize/generated-pytest flow.
 - `anthropic_langgraph_regression.py`: equivalent installed Anthropic Messages SDK workflow, sharing the same provider-neutral input events in `openai_langgraph_input.json`.
+- `openai_chat_langgraph_regression.py`: installed OpenAI Chat Completions SDK workflow with the same input and status-checking fix.
 
 No example calls a hosted model provider or invokes an external mutating tool.
 
@@ -41,3 +42,20 @@ The Anthropic example uses `input_schema` and `tool_use` blocks matching the [of
 Use the same commands above with graph/oracle targets under `examples.anthropic_langgraph_regression`, and retain the shared `examples/openai_langgraph_input.json` input. Separate local capture, minimized fixture, and generated-test paths prevent overwriting the OpenAI artifacts.
 
 The 2026-11-10 Anthropic run saved artifacts in ignored `results/anthropic_provider_workflow/`. Three events reduced to one and three interactions to two in seven checks. The generated test exited 1 before the application fix and 0 afterward. Recording used one local HTTP fixture call and two fixture tool calls; replay/minimization/fixed replay used zero callbacks. Installed versions: Anthropic 0.125.0, LangGraph 1.2.19, HTTPX 0.28.1. The shared OpenAI/Anthropic integration matrix passes all 14 tests, including bidirectional provider-substitution rejection. No hosted provider requests or API credentials were used.
+
+### Chat Completions and installed-wheel checks
+
+Chat Completions uses the nested function-tool schema and `message.tool_calls` envelope from the [official OpenAI documentation](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). The actual installed SDK parses a local fixture response with null message content; the adapter retains the tool-call ID, function name, and JSON arguments without manufacturing output text. Use graph/oracle targets under `examples.openai_chat_langgraph_regression` with the shared input above.
+
+The shared matrix now covers all three supported synchronous provider interfaces in 21 passing tests. Its three cross-interface tests each reject both other interfaces, covering all six directed substitution attempts, including Responses versus Chat Completions within the same SDK. Streaming, async, hosted-model quality, and unwrapped side effects remain outside these checks.
+
+Local Chat Completions artifacts are retained in ignored `results/chat_provider_workflow/`. The 2026-11-10 run reduced three events to one and three calls to two in seven checks; generated pytest failed before the application fix and passed afterward. Recording made one local HTTP-fixture callback and two tool-fixture callbacks, with zero replay callbacks. Versions: OpenAI 2.54.0, LangGraph 1.2.19, HTTPX 0.28.1.
+
+`benchmarks/package_workflow_smoke.py` separately checks a built wheel in a clean environment containing that wheel and pytest:
+
+```powershell
+# Use the Python interpreter of the clean wheel-installed environment:
+.\results\package_workflow_release\venv\Scripts\python.exe benchmarks/package_workflow_smoke.py --output-dir results/package_workflow_release/check
+```
+
+The script rejects an editable/source import, runs the installed CLI from a temporary directory outside the checkout with only a copied standard-library fixture module on its import path, and checks capture, required-failure replay, minimization, and the generated test's expected failure then success. It requires no SDK extras or hosted providers. This is a packaged core-workflow check; the SDK/LangGraph matrix is tested separately. The report and copied artifacts are retained under the output directory. The existing package-smoke CI job now includes this step; the workflow file parses locally, but GitHub CI has not run in this local-only milestone.
