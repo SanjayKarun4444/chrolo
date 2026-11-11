@@ -210,6 +210,7 @@ def benchmark_openhands_cmd(args):
         raise ValueError("input must contain a 'task' object with image and test metadata")
     report = benchmark_openhands_trace(
         row, task, repeat=args.repeat, max_checks=args.max_checks,
+        require_action_dependence=args.require_action_dependence,
     )
     _write_json(args.output, report)
     print(
@@ -467,6 +468,7 @@ def main():
     openhands_benchmark.add_argument("input", type=Path, help="JSON object with 'row' trajectory and 'task' oracle metadata")
     openhands_benchmark.add_argument("--repeat", type=int, default=5, help="Additional full-trace reproduction runs")
     openhands_benchmark.add_argument("--max-checks", type=int, default=1000, help="Maximum minimizer run/oracle checks")
+    openhands_benchmark.add_argument("--require-action-dependence", action="store_true", help="Require every target and control test to pass without agent actions")
     openhands_benchmark.add_argument("--output", type=Path, default=Path("openhands-benchmark.json"))
     openhands_benchmark.set_defaults(handler=benchmark_openhands_cmd)
     serve = command.add_parser("serve", help="Open the responsive local trace inspection and sanitization UI")

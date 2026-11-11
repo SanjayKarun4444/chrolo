@@ -1,5 +1,31 @@
 # Chrolo reliability benchmarks
 
+## Repeatable local real-agent regression checks
+
+From the repository root, with the retained local fixtures and Docker running:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.real_regressions
+```
+
+The default runs each verified minimal failure, its empty-action control, and its explicitly passing edit-removal control three times. It also runs the real compatible Vermouth comparison once: 19 checks across both repositories. A passing suite verifies Chrolo's replay behavior: the known captured bugs must reproduce and every passing control must pass all configured tests. It does not rerun minimization or imply that the original agent bugs are fixed. The Vermouth check retains the deterministic legacy-tool fixture limitation documented below.
+
+`benchmarks/real_regressions.json` names the two cases and binds their task/oracle definitions, minimized events, and comparison fixture to SHA-256 fingerprints. Source actions must remain an unchanged ordered subset of the retained public trace, and images must have full SHA-256 digests. Changed evaluators or fixtures require review and an explicit manifest update; they cannot silently replace a known case. Raw trace payloads remain ignored under `results/`.
+
+The command validates every fixture before Docker starts. Missing/invalid fixtures produce exit 2 and a failed report; failed or inconclusive checks produce exit 1; every check passing produces exit 0. A new report starts incomplete and unsuccessful, then is updated as each case finishes. Default local report: `results/real-regression-checks.json`. Exception messages, commands, and test payloads are omitted from that summary. Use `--repeat N` and `--output PATH` to adjust the run; comparisons run once.
+
+The ordinary test suite skips these two Docker checks. To run them through pytest, with one repetition per case plus the comparison:
+
+```powershell
+$env:CHROLO_RUN_REAL_REGRESSIONS = '1'
+.\.venv\Scripts\python.exe -m pytest -q tests/test_real_regression_integration.py
+Remove-Item Env:CHROLO_RUN_REAL_REGRESSIONS
+```
+
+The checked-in manifest contains local paths and fingerprints only. It does not download datasets or publish fixtures, and the default CI test job does not execute recorded actions. Existing raw inputs/reports are prerequisites; the case-specific input builders and evidence instructions below describe their preparation. The manifest's PyHOCON input is the retained pinned cohort input `results/pyhocon-cohort-1-1097.json`.
+
+Verified on 2026-11-07: the default command passed all 19 checks; both opt-in pytest cases passed; the regular suite passed 194 tests with these two Docker cases skipped by default.
+
 `python -m chrolo benchmark` runs deterministic synthetic cases. It reports reproduction reliability, preserved failure signatures, event reduction and check counts against a naïve single-pass deletion baseline, interaction records pruned when reduced executions no longer make those calls, strict replay of the minimized cassette, replay timing, fixture sizes, cassette consumption, safety rejection cases, and simulated-fix sensitivity.
 
 For a reviewed dataset, run:
@@ -49,9 +75,62 @@ The local SWE-bench Multimodal task shards contain runnable test scripts and Doc
 
 Real-world minimization scores still require runners that can deterministically re-execute selected real traces with stable task-level failure oracles.
 
-## OpenHands isolated action runner (not yet validated on a task image)
+## OpenHands isolated action runner
 
-`chrolo.openhands.extract_actions` converts a row from the OpenHands trajectory corpus into ordered Chrolo events. `OpenHandsDockerRunner` starts a new container for each candidate with networking disabled, no host bind mounts, dropped capabilities, no-new-privileges, and CPU, memory, PID, per-action, test, and overall time limits. It executes the recorded Bash commands and the sample's `view`, `create`, and `str_replace` editor operations, then reports test statuses from the configured pytest command. A runner timeout removes its named container. The paired `failure_oracle` requires the same observed set of failing `FAIL_TO_PASS` tests and passing `PASS_TO_PASS` controls.
+### Action-dependent real-agent packaging regression (2026-11-07)
+
+The public OpenHands run `chatcmpl-233a23562251110a85e8419c0f8791b5` for `chimpler__pyhocon-322` contains a repository-root cleanup command that removes `*.py`, including the existing `setup.py`. An independent packaging oracle checks that `python setup.py --name` still succeeds and returns `pyhocon`; this is a new evaluation check, not the dataset's original nested-substitution issue oracle. The agent actions are unchanged. Controls comprise 207 previously passing dataset tests plus package-import and source-file checks. The untouched image passes the packaging check and all 209 controls.
+
+The full 94-action trace reproduced the packaging failure in 3/3 repeats. Chrolo reduced it to the single recorded cleanup action (`action-0089`) in 13 candidate checks, a 98.94% event reduction. The reduced trace reproduced 3/3 times while all 209 controls passed. Removing that action passed the target and every control in 3/3 paired checks. There were no runner or oracle exceptions. This is one hand-selected, action-dependent real-agent regression, not a corpus-wide reliability estimate or a result for the original issue's correctness. The official issue patch is not represented as a packaging fix; the intervention removes the destructive cleanup action.
+
+The task image digest is `sha256:7bb5310e11201ba1c6397ac7032a1ef100df7b4813bbe43ef701c16700f5d582`. It uses its prepared Conda environment and an explicit `/testbed` Python import path; no image derivative was required. Raw traces, prepared inputs, and the detailed report remain local in ignored `results/`; report: `results/pyhocon-packaging-report.json`.
+
+Rebuild the input from the locally retained public source row and task shard (the builder requires optional `pyarrow`):
+
+```powershell
+python -m benchmarks.build_pyhocon_packaging_input --trace-json results/pyhocon-packaging-trace.json --tasks-parquet results/swerebench-filtered.parquet --output results/pyhocon-packaging-input.json
+.\.venv\Scripts\python.exe -m chrolo benchmark-openhands results/pyhocon-packaging-input.json --require-action-dependence --repeat 3 --max-checks 100 --output results/pyhocon-packaging-report.json
+```
+
+`--require-action-dependence` rejects the task before full replay or minimization unless every target and control test passes on an empty trace. `fail_to_pass` in this prepared runner input selects the independently evaluated regression target; it is not the dataset's original `FAIL_TO_PASS` list. The builder retains the official evaluation test patch and appends the packaging tests. The parser accepts result lines only for configured test IDs, preventing application `ERROR` log lines from becoming spurious test statuses.
+
+Reference-patch sensitivity counts a check as verified only when every configured target and control is `PASSED`. An error, skipped/missing test, failed control, or runner exception is inconclusive rather than a successful fix. `reference_patch_checks` records `passed`, `failure_preserved`, or `inconclusive` per attempt. All attempts remain in the sensitivity denominator, so two successful checks and one environment error report 2/3 rather than 100%.
+
+### Independent repository: legacy-tool compatibility (2026-11-07)
+
+The public Vermouth run `chatcmpl-8d3c6f7f02c17ba871a90fb7bf09d16c` for `marrink-lab__vermouth-martinize-279` replaces the existing DSSP `-i` command protocol with positional/modern command forms. An independent compatibility oracle supplies a deterministic executable accepting the original `-i` protocol and emitting the repository's existing DSSP output fixture. It verifies the parsed result and both savefile modes. This fixture is **not a real legacy DSSP binary** and does not validate protein-analysis accuracy or the original Windows issue fix.
+
+Both compatibility targets and 31 existing DSSP controls pass on the untouched image. Unrelated molecule-naming tests are excluded: one already failed on the untouched image. Only the fixture's explicit unsupported-protocol marker causes a target `FAILED`; other exceptions, output errors, or savefile errors are inconclusive and cannot preserve this failure signature.
+
+All three full-action repeats reproduced the compatibility failure. Minimization reduced 68 actions to two recorded edits (`action-0024`, the tempfile import, and `action-0025`, the command-changing implementation), a 97.06% reduction in 12 checks. Three minimal-trace repeats preserved the failure with all 31 controls passing; three empty controls passed all 33 tests. Removing the command-changing edit passed every test. Removing only the import caused a different execution failure and was rejected as inconclusive. Two candidate runner errors and four oracle-false candidates were rejected during minimization; these are not reproductions. The official issue patch is not claimed as a fix for this independent compatibility property.
+
+The image is pinned at `sha256:741f67ef68d1f287d91f0788385e664d089501ac065b78bdba9dd05014a7cbae`. Local report: `results/vermouth-legacy-report.json`. Rebuild and rerun using optional `pyarrow` for the builder:
+
+```powershell
+python -m benchmarks.build_vermouth_legacy_input --trace-json results/vermouth-legacy-trace.json --tasks-parquet results/swerebench-filtered.parquet --output results/vermouth-legacy-input.json
+.\.venv\Scripts\python.exe -m chrolo benchmark-openhands results/vermouth-legacy-input.json --require-action-dependence --repeat 3 --max-checks 100 --output results/vermouth-legacy-report.json
+```
+
+A real comparison run, `chatcmpl-0069c298d0f1b6ce337cf5dae899deae`, retains a legacy fallback. Its empty control and full 82-action replay both passed the two compatibility targets and all 31 controls, evaluated once each. This checks that the fixture accepts compatible recorded changes rather than rejecting every attempted fix. Comparison report: local `results/vermouth-legacy-comparison-report.json`. Neither run's original issue-resolution label is treated as the compatibility outcome.
+
+`python -m benchmarks.run_packaging_cohort INPUT... --output REPORT` evaluates a preselected list without minimizing passing cases. It writes the complete selection before execution, saves each result as it completes, checks a fresh empty control per case, and keeps four outcomes distinct: action-dependent target failure, no target failure, rejected empty control, and inconclusive replay. Its report contains IDs/counts rather than action payloads or exception messages. Multiple runs of one issue are correlated evidence, not independent tasks or a general reliability estimate.
+
+The first cohort completed on 2026-11-07: all nine indexed unresolved PyHOCON runs with nonempty patches, totaling 776 recorded actions, were selected before cohort replay. Every fresh empty control passed. Full-action replay found the existing packaging regression in one run and no packaging failure in eight; all nine retained 209 passing controls. There were zero rejected empty controls and zero inconclusive replays. Each cohort run was evaluated once; the positive case additionally has the separate three-repeat full/minimal/ablation evidence above. This did not discover an additional positive case. The retained inputs pin the image digest. Local report: `results/pyhocon-packaging-cohort-report.json`; source selection: `results/pyhocon-cohort-selection.json`.
+
+Rerun the retained cohort without changing its selection:
+
+```powershell
+$cohortInputs = (Get-Content results/pyhocon-packaging-cohort-report.json -Raw | ConvertFrom-Json).selection | ForEach-Object { Join-Path results $_ }
+.\.venv\Scripts\python.exe -m benchmarks.run_packaging_cohort @cohortInputs --output results/pyhocon-packaging-cohort-rerun.json
+```
+
+2026-11-07 result: this workflow has now executed on the locally repaired PlasmaFAIR task image described below. Three full-action repeats reproduced all eight expected failures with both controls passing; minimization reduced 88 actions to zero in eight checks; three official-reference-fix checks cleared the failure. The empty-action result means this case demonstrates an unresolved repository bug, rather than an agent-action-dependent failure. A suitable action-dependent benchmark must additionally clear its failure oracle on an empty-action control. Earlier unvalidated/pending notes below are historical.
+
+Task metadata may include an explicit `environment` object mapping environment variable names to string values. These values are passed only to the task container. For images with a prepared Conda environment, set `environment.PATH` to include that environment's `bin` directory before the system paths so the helper, recorded commands, and test runner use the same installed dependencies. The PlasmaFAIR task image has pytest in `/opt/conda/envs/testbed/bin`, rather than its default base environment. Out-of-workspace editor requests are rejected as tool errors and later recorded actions continue.
+
+The input builder retains the dataset's `test_patch`, which the runner applies after recorded actions and before evaluating tests. This supplies the issue's evaluation tests rather than the image's older tests. On 2026-11-07, the PlasmaFAIR image required a local derivative adding `/sdf-xarray -> /testbed` because its editable installation refers to the former path. The upstream image digest is `sha256:a5c3f9c64a4f45fdc63c8cbd75d4f8dda91f8daf49c37d951b6c6d6e897ef14e`; the local Dockerfile is retained in ignored `results/Dockerfile.openhands`. With that repair, the prepared environment, and the evaluation patch, empty-action execution produced eight expected failures and two passing controls; the official reference patch passed all ten. This validates task setup, separately from real-agent action replay and minimization.
+
+`chrolo.openhands.extract_actions` converts a row from the OpenHands trajectory corpus into ordered Chrolo events. `OpenHandsDockerRunner` starts a new container for each candidate with networking disabled, no host bind mounts, dropped capabilities, no-new-privileges, and CPU, memory, PID, per-action, test, and overall time limits. It executes the recorded Bash commands and the sample's `view`, `create`, and `str_replace` editor operations, then reports test statuses from the configured pytest command. A runner timeout removes its named container. Only pytest `FAILED` counts toward the original failure signature; `ERROR`, `SKIPPED`, and `PASSED` do not. The benchmark requires every configured `FAIL_TO_PASS` test to fail on baseline and every `PASS_TO_PASS` control to pass. Its paired `failure_oracle` then requires that exact failure set and all passing controls for each candidate.
 
 The CLI input joiner retains the task's official patch. The benchmark applies it in a separate fresh container before replaying the minimized trace and repeats the exact failure-oracle check, reporting fix sensitivity. This is an intervention against the original task oracle, rather than a simulated corrected trace. The runner and orchestration have unit coverage with mocked Docker/runner processes and a syntax check for the in-container helper. The editor emulates `create` without overwriting, unique-only `str_replace`, line-based `insert`, and per-file `undo_edit`; `view` is read-only. These semantics follow the [OpenHands `str_replace_editor` specification](https://github.com/togethercomputer/OpenHands/blob/main/openhands/agenthub/codeact_agent/tools/str_replace_editor.py) and are tested by running the in-container helper against a temporary fixture. The builder maps recorded `/workspace/<repo>` paths to the task image's `/testbed`, including absolute paths inside shell commands. The workflow has **not** been run against the SWE-rebench image. Keep real-agent reliability claims open until the published task image validates replay and the reference-patch intervention. Docker was left stopped at the user's request.
 

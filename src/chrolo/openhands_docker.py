@@ -76,8 +76,8 @@ for event in request["actions"]:
             process.wait()
     elif kind == "str_replace_editor":
         command = args.get("command")
-        path = in_workspace(map_workspace_path(args.get("path", "")))
         try:
+            path = in_workspace(map_workspace_path(args.get("path", "")))
             if command == "view":
                 continue
             if command == "create":
@@ -110,12 +110,20 @@ for event in request["actions"]:
                 path.write_text(history.pop(), encoding="utf-8")
             else:
                 raise ValueError("unsupported str_replace_editor command")
-        except (OSError, KeyError, UnicodeError):
+        except (OSError, KeyError, UnicodeError, ValueError):
             # Tool errors are observations in the original run. Later recorded
             # actions still execute; their arguments do not depend on outputs.
             continue
     else:
         raise ValueError("unsupported action kind")
+
+test_patch = request.get("test_patch")
+if test_patch:
+    patched = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=root,
+                             input=test_patch, text=True, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, timeout=request["test_timeout"])
+    if patched.returncode != 0:
+        raise RuntimeError("test patch could not be applied")
 
 command = request["test_command"]
 tests = request["fail_to_pass"] + request["pass_to_pass"]
@@ -125,7 +133,7 @@ result = subprocess.run(command + tests, cwd=root, text=True,
 statuses = {}
 for line in result.stdout.splitlines():
     match = re.match(request["result_pattern"], line.strip())
-    if match:
+    if match and match.group(2) in tests:
         statuses[match.group(2)] = match.group(1)
 print(json.dumps({"statuses": statuses, "test_exit_code": result.returncode}))
 '''
@@ -151,6 +159,8 @@ class OpenHandsDockerRunner:
         pids_limit: int = 256,
         reference_patch: str | None = None,
         source_workspace: str | None = None,
+        environment: Mapping[str, str] | None = None,
+        test_patch: str | None = None,
     ) -> None:
         if not isinstance(image, str) or not image.strip():
             raise ValueError("Docker image must be a non-empty string")
@@ -177,6 +187,15 @@ class OpenHandsDockerRunner:
             raise ValueError("memory must be a Docker size such as 4g")
         if not re.fullmatch(r"[1-9][0-9]*(?:\.[0-9]+)?", cpus):
             raise ValueError("cpus must be a positive Docker CPU quota")
+        if environment is not None and (not isinstance(environment, Mapping) or any(
+            not isinstance(k, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k)
+            or not isinstance(v, str) or "\x00" in v for k, v in environment.items()
+        )):
+            raise ValueError("environment must map variable names to string values")
+        if test_patch is not None and not isinstance(test_patch, str):
+            raise ValueError("test_patch must be a string")
+        self.test_patch = test_patch
+        self.environment = dict(environment or {})
         self.image = image
         self.fail_to_pass = list(fail_to_pass)
         self.pass_to_pass = list(pass_to_pass)
@@ -197,6 +216,8 @@ class OpenHandsDockerRunner:
         argv = [self.docker_executable, "run", "--rm", "-i"]
         if container_name is not None:
             argv.extend(["--name", container_name])
+        for name, value in self.environment.items():
+            argv.extend(["--env", f"{name}={value}"])
         argv.extend([
             "--network=none", f"--memory={self.memory}", f"--cpus={self.cpus}",
             f"--pids-limit={self.pids_limit}", "--cap-drop=ALL",
@@ -246,6 +267,7 @@ class OpenHandsDockerRunner:
             "result_pattern": _RESULT_PATTERN.pattern,
             "reference_patch": self.reference_patch,
             "source_workspace": self.source_workspace,
+            "test_patch": self.test_patch,
         }
         container_name = f"chrolo-replay-{uuid.uuid4().hex}"
         argv = self.docker_argv(container_name)
@@ -284,9 +306,11 @@ class OpenHandsDockerRunner:
         expected = set(self.fail_to_pass) | set(self.pass_to_pass)
         if set(statuses) != expected:
             raise RuntimeError("OpenHands Docker replay did not report every configured test")
+        if any(status not in {"PASSED", "FAILED", "ERROR", "SKIPPED"} for status in statuses.values()):
+            raise RuntimeError("OpenHands Docker replay returned an unsupported test status")
         return {
             "statuses": statuses,
-            "failed_to_pass": sorted(t for t in self.fail_to_pass if statuses[t] in {"FAILED", "ERROR"}),
+            "failed_to_pass": sorted(t for t in self.fail_to_pass if statuses[t] == "FAILED"),
             "passed_to_pass": sorted(t for t in self.pass_to_pass if statuses[t] == "PASSED"),
             "test_exit_code": result.get("test_exit_code"),
         }
@@ -324,6 +348,7 @@ def benchmark_openhands_trace(
     *,
     repeat: int = 5,
     max_checks: int = 1000,
+    require_action_dependence: bool = False,
     runner_factory=OpenHandsDockerRunner,
 ) -> dict[str, Any]:
     """Replay and minimize one recorded trace against its SWE-rebench tests.
@@ -345,9 +370,16 @@ def benchmark_openhands_trace(
     runner_options = {key: task[key] for key in (
         "image", "fail_to_pass", "pass_to_pass", "test_command", "workdir",
         "docker_executable", "action_timeout", "test_timeout", "total_timeout",
-        "memory", "cpus", "pids_limit", "source_workspace",
+        "memory", "cpus", "pids_limit", "source_workspace", "environment", "test_patch",
     ) if key in task}
     runner = runner_factory(**runner_options)
+
+    empty_result = None
+    if require_action_dependence:
+        empty_result = runner([])
+        statuses = empty_result.get("statuses", {}) if isinstance(empty_result, Mapping) else {}
+        if any(statuses.get(test) != "PASSED" for test in (*task["fail_to_pass"], *task["pass_to_pass"])):
+            raise ValueError("Empty-action control must pass every target and control test for action-dependent evidence")
 
     baseline = runner(list(events))
     if not isinstance(baseline, Mapping):
@@ -356,6 +388,8 @@ def benchmark_openhands_trace(
     expected_controls = baseline.get("passed_to_pass")
     if not isinstance(expected_failures, list) or not expected_failures:
         raise ValueError("Baseline did not reproduce a FAIL_TO_PASS failure")
+    if set(expected_failures) != set(task["fail_to_pass"]):
+        raise ValueError("Baseline did not fail every configured FAIL_TO_PASS test")
     if set(expected_controls or ()) != set(task["pass_to_pass"]):
         raise ValueError("Baseline failed one or more PASS_TO_PASS controls")
     oracle = failure_oracle(expected_failures, task["pass_to_pass"])
@@ -377,19 +411,28 @@ def benchmark_openhands_trace(
 
     fix_sensitivity_rate = None
     failure_after_reference_patch = None
+    reference_patch_checks = []
     if isinstance(task.get("reference_patch"), str) and task["reference_patch"].strip():
         fixed_runner = runner_factory(**runner_options, reference_patch=task["reference_patch"])
         fixed_repeats: list[bool | None] = []
         for _ in range(repeat):
             try:
-                fixed_repeats.append(bool(oracle(fixed_runner(list(result.events)))))
+                fixed_result = fixed_runner(list(result.events))
+                statuses = fixed_result.get("statuses", {}) if isinstance(fixed_result, Mapping) else {}
+                all_passed = all(statuses.get(test) == "PASSED" for test in (*task["fail_to_pass"], *task["pass_to_pass"]))
+                if all_passed:
+                    fixed_repeats.append(False)
+                    reference_patch_checks.append("passed")
+                elif oracle(fixed_result):
+                    fixed_repeats.append(True)
+                    reference_patch_checks.append("failure_preserved")
+                else:
+                    fixed_repeats.append(None)
+                    reference_patch_checks.append("inconclusive")
             except Exception:
                 fixed_repeats.append(None)
-        valid_fixed = [value for value in fixed_repeats if value is not None]
-        fix_sensitivity_rate = (
-            sum(value is False for value in valid_fixed) / len(valid_fixed)
-            if valid_fixed else None
-        )
+                reference_patch_checks.append("inconclusive")
+        fix_sensitivity_rate = sum(value is False for value in fixed_repeats) / repeat
         failure_after_reference_patch = fixed_repeats[-1] if fixed_repeats else None
     original_count = len(events)
     minimized_count = len(result.events)
@@ -399,12 +442,15 @@ def benchmark_openhands_trace(
         "repo": row.get("repo"),
         "image": task["image"],
         "repetitions": repeat,
+        "action_dependence_required": require_action_dependence,
+        "empty_action_result": empty_result,
         "reproduction_rate": sum(repeats) / repeat,
         "baseline_failed_to_pass": sorted(expected_failures),
         "baseline_passed_to_pass": sorted(expected_controls),
         "failure_signature_preserved": preserved,
         "failure_after_reference_patch": failure_after_reference_patch,
         "fix_sensitivity_rate": fix_sensitivity_rate,
+        "reference_patch_checks": reference_patch_checks,
         "minimized_result": minimized_result,
         "original_events": original_count,
         "remaining_events": minimized_count,

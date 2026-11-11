@@ -80,6 +80,8 @@ def build_input(trace_source: dict[str, Any], task_row: dict[str, Any]) -> dict[
         task["source_workspace"] = source_workspace
     if isinstance(task_row.get("patch"), str) and task_row["patch"].strip():
         task["reference_patch"] = task_row["patch"]
+    if isinstance(task_row.get("test_patch"), str) and task_row["test_patch"].strip():
+        task["test_patch"] = task_row["test_patch"]
     if isinstance(task_row.get("license_name"), str):
         task["license"] = task_row["license_name"]
     return {"row": row, "task": task}

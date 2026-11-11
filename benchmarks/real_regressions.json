@@ -1,0 +1,32 @@
+{
+  "format": "chrolo.real-regressions.v1",
+  "cases": [
+    {
+      "name": "pyhocon-packaging",
+      "input": "results/pyhocon-cohort-1-1097.json",
+      "report": "results/pyhocon-packaging-report.json",
+      "expected_events": [
+        "action-0089"
+      ],
+      "remove_for_passing_control": [
+        "action-0089"
+      ],
+      "fixture_sha256": "ff5fe97b29435dc3de1348bc8035d5857c85156e4fdc442e61ab14b341d91ba9"
+    },
+    {
+      "name": "vermouth-legacy-protocol",
+      "input": "results/vermouth-legacy-input.json",
+      "report": "results/vermouth-legacy-report.json",
+      "expected_events": [
+        "action-0024",
+        "action-0025"
+      ],
+      "remove_for_passing_control": [
+        "action-0025"
+      ],
+      "comparison": "results/vermouth-legacy-comparison-input.json",
+      "fixture_sha256": "3835576df1510aa2225d971208c0c34cc6e643f28863a04678031e28b3581dc4",
+      "comparison_sha256": "a91fd1a58d37021bad56fa490f543908dec113c328048e1805bcfc8c78e5317b"
+    }
+  ]
+}
