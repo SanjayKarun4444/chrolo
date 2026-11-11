@@ -1,5 +1,6 @@
 import copy
 import json
+import importlib
 import runpy
 import socket
 import subprocess
@@ -14,14 +15,13 @@ from chrolo.cassette import ReplayMismatch
 from chrolo.core import parse_events
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = "examples.openai_langgraph_regression"
 
 
-@pytest.fixture
-def workflow(monkeypatch):
+@pytest.fixture(params=["openai", "anthropic"])
+def workflow(monkeypatch, request):
     pytest.importorskip("langgraph")
-    pytest.importorskip("openai")
-    from examples import openai_langgraph_regression as workflow
+    pytest.importorskip(request.param)
+    workflow = importlib.import_module("examples." + request.param + "_langgraph_regression")
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
 
     def forbid_network(*args, **kwargs):
@@ -38,19 +38,28 @@ def invoke_cli(monkeypatch, *args):
 
 
 def test_sdk_graph_cli_to_generated_regression_has_no_replay_callbacks(tmp_path, monkeypatch, workflow):
+    target = workflow.__name__
     captured = tmp_path / "capture.json"
     minimal = tmp_path / "minimal.json"
     generated = tmp_path / "test_generated.py"
-    invoke_cli(monkeypatch, "capture", "--graph", TARGET + ":build_graph", "--input",
+    invoke_cli(monkeypatch, "capture", "--graph", target + ":build_graph", "--input",
                ROOT / "examples/openai_langgraph_input.json", "--record-interactions", "--output", captured)
     saved = json.loads(captured.read_text())
     calls = saved["interactions"]["interactions"]
     assert [call["boundary"] for call in calls] == ["tool", "model", "tool"]
-    assert calls[1]["response"]["response"]["output"][0]["type"] == "function_call"
+    model_result = calls[1]["response"]
+    if "anthropic" in target:
+        block = model_result["response"]["content"][1]
+        assert block == {"type": "tool_use", "id": "toolu_fixture", "name": "fetch_ticket", "input": {"ticket_id": 42}}
+        assert model_result["output_text"] == "Fetching ticket."
+    else:
+        block = model_result["response"]["output"][0]
+        assert block["type"] == "function_call" and block["call_id"] == "lookup_42"
+        assert json.loads(block["arguments"]) == {"ticket_id": 42}
     assert workflow.CALLS == {"record_http": 1, "record_tool": 2, "replay_http": 0, "replay_tool": 0}
     recorded_counts = workflow.CALLS.copy()
-    invoke_cli(monkeypatch, "replay", captured, "--oracle", TARGET + ":original_failure", "--require-failure")
-    invoke_cli(monkeypatch, "minimize", captured, "--oracle", TARGET + ":original_failure",
+    invoke_cli(monkeypatch, "replay", captured, "--oracle", target + ":original_failure", "--require-failure")
+    invoke_cli(monkeypatch, "minimize", captured, "--oracle", target + ":original_failure",
                "--output", minimal, "--test", generated)
     reduced = json.loads(minimal.read_text())
     assert [event["id"] for event in reduced["events"]] == ["select"]
@@ -61,7 +70,7 @@ def test_sdk_graph_cli_to_generated_regression_has_no_replay_callbacks(tmp_path,
         regression()
     broken = subprocess.run([sys.executable, "-m", "pytest", "-q", str(generated)], cwd=ROOT, capture_output=True, text=True)
     assert broken.returncode == 1 and "Original failure recurred" in broken.stdout
-    reduced["graph"] = TARGET + ":build_fixed_graph"
+    reduced["graph"] = target + ":build_fixed_graph"
     minimal.write_text(json.dumps(reduced), encoding="utf-8")
     regression()
     fixed = subprocess.run([sys.executable, "-m", "pytest", "-q", str(generated)], cwd=ROOT, capture_output=True, text=True)
@@ -69,12 +78,15 @@ def test_sdk_graph_cli_to_generated_regression_has_no_replay_callbacks(tmp_path,
     assert workflow.CALLS == recorded_counts
 
 
-@pytest.mark.parametrize("failure,exception_type", [("provider", "openai.BadRequestError"), ("tool", "builtins.RuntimeError")])
-def test_sdk_graph_recorded_errors_replay_the_same_class_without_callbacks(workflow, monkeypatch, failure, exception_type):
+@pytest.mark.parametrize("failure", ["provider", "tool"])
+def test_sdk_graph_recorded_errors_replay_the_same_class_without_callbacks(workflow, monkeypatch, failure):
+    target = workflow.__name__
+    sdk = "anthropic" if "anthropic" in target else "openai"
+    exception_type = sdk + ".BadRequestError" if failure == "provider" else "builtins.RuntimeError"
     monkeypatch.setattr(workflow, "FIXTURE_ERROR", failure)
     source = json.loads((ROOT / "examples/openai_langgraph_input.json").read_text())
     capture = capture_graph(workflow.build_graph, source["initial_state"], parse_events(source["events"]),
-                            graph_target=TARGET + ":build_graph", record_interactions=True, capture_exceptions=True)
+                            graph_target=target + ":build_graph", record_interactions=True, capture_exceptions=True)
     assert capture["outcome"] == {"format": "chrolo.outcome.v1", "status": "exception", "exception_type": exception_type}
     recorded_counts = workflow.CALLS.copy()
     # Removing the fixture's live failure must not change the recorded result.
@@ -87,11 +99,14 @@ def test_sdk_graph_recorded_errors_replay_the_same_class_without_callbacks(workf
 def test_provider_graph_replay_rejects_corrupt_boundaries_without_fallback(workflow, mutation):
     source = json.loads((ROOT / "examples/openai_langgraph_input.json").read_text())
     capture = capture_graph(workflow.build_graph, source["initial_state"], parse_events(source["events"]),
-                            graph_target=TARGET + ":build_graph", record_interactions=True)
+                            graph_target=workflow.__name__ + ":build_graph", record_interactions=True)
     recorded_counts = workflow.CALLS.copy()
     calls = capture["interactions"]["interactions"]
     if mutation == "mismatch":
-        calls[1]["request"]["input"] = "different request"
+        if "anthropic" in workflow.__name__:
+            calls[1]["request"]["messages"][0]["content"] = "different request"
+        else:
+            calls[1]["request"]["input"] = "different request"
     elif mutation == "missing":
         calls.pop()
     else:
@@ -101,3 +116,19 @@ def test_provider_graph_replay_rejects_corrupt_boundaries_without_fallback(workf
     with pytest.raises(ReplayMismatch):
         replay_recorded(capture)
     assert workflow.CALLS == recorded_counts
+
+
+def test_provider_recording_cannot_be_replayed_through_a_different_provider(workflow):
+    other_sdk = "openai" if "anthropic" in workflow.__name__ else "anthropic"
+    pytest.importorskip(other_sdk)
+    other = importlib.import_module("examples." + other_sdk + "_langgraph_regression")
+    other.reset_calls()
+    source = json.loads((ROOT / "examples/openai_langgraph_input.json").read_text())
+    capture = capture_graph(workflow.build_graph, source["initial_state"], parse_events(source["events"]),
+                            graph_target=workflow.__name__ + ":build_graph", record_interactions=True)
+    recorded_counts = workflow.CALLS.copy()
+    capture["graph"] = other.__name__ + ":build_graph"
+    with pytest.raises(ReplayMismatch):
+        replay_recorded(capture)
+    assert workflow.CALLS == recorded_counts
+    assert not any(other.CALLS.values())
