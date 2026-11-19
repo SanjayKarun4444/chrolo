@@ -111,6 +111,10 @@ def build_entrypoint_input(trace: dict, task_row: dict, *, image: str) -> dict:
     task["environment"] = {
         "PATH": "/opt/conda/envs/testbed/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "PYTHONPATH": "/testbed",
+        # The published image includes pytest-randomly. These legacy controls
+        # create shared directories and require their recorded selector order.
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONHASHSEED": "0",
     }
     source["evaluation"] = {
         "kind": "independent-installed-opener-error-propagation",

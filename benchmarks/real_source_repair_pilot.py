@@ -1,6 +1,6 @@
 """Generate and exercise a real-action regression with a separate source repair.
 
-Uses the fingerprinted local Vermouth fixture and pinned offline Docker image.
+Uses fingerprinted local fixtures and pinned offline Docker images.
 This is action replay, not a provider cassette or a repair of agent policy.
 """
 from __future__ import annotations
@@ -49,14 +49,17 @@ def original_failure(result):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--case", choices=["vermouth-legacy-protocol", "pyfilesystem-installed-opener"], default="vermouth-legacy-protocol")
+    parser.add_argument("--use-retained-minimal", action="store_true", help="Start test generation from the already verified minimized actions")
     args = parser.parse_args()
-    entry = next(row for row in read_json(DEFAULT_MANIFEST)["cases"] if row["name"] == "vermouth-legacy-protocol")
+    entry = next(row for row in read_json(DEFAULT_MANIFEST)["cases"] if row["name"] == args.case)
     case = load_case(entry)
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {"format": "chrolo.real-source-repair-pilot.v1", "complete": False, "passed": False,
               "fixture_sha256": case["fixture_sha256"], "image": case["source"]["task"]["image"],
-              "scope": "Real recorded agent edits; deterministic legacy executable fixture; source repair reverts incompatible invocation, not agent policy", "steps": []}
+              "case": args.case, "search_started_from_retained_minimal": args.use_retained_minimal,
+              "scope": "Real recorded agent edits with deterministic external fixtures; repairs application source, not agent policy", "steps": []}
     report_path = output / "report.json"
 
     def checkpoint():
@@ -69,8 +72,9 @@ def main():
     task_path.write_text(json.dumps(case["source"]["task"], indent=2), encoding="utf-8")
     task_bytes = task_path.read_bytes()
     full = {"events": extract_actions(case["source"]["row"])}
+    search_input = {"events": [event.to_dict() for event in case["events"]]} if args.use_retained_minimal else full
     source = output / "input.json"
-    source.write_text(json.dumps(full, indent=2), encoding="utf-8")
+    source.write_text(json.dumps(search_input, indent=2), encoding="utf-8")
     source_bytes = source.read_bytes()
     environment = dict(os.environ, PYTHONPATH=os.pathsep.join([str(output), str(Path(__file__).resolve().parents[1] / "src")]),
                        PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
@@ -95,20 +99,30 @@ def main():
     assert [event["id"] for event in reduced["events"]] == entry["expected_events"]
     test = ["-m", "pytest", "-q", "test_regression.py"]
     run("before_fix", test, expected=1, message="Original failure recurred")
-    # Restore the known-working legacy invocation in application source after
-    # replaying the exact recorded edits. The oracle and actions do not change.
+    # Repair application source after replaying the exact recorded edits.
+    # The oracle and recorded actions do not change.
     edit = case["events"][-1].payload["arguments"]
-    path = "vermouth/dssp/dssp.py"
+    path = "fs/opener/registry.py" if args.case == "pyfilesystem-installed-opener" else "vermouth/dssp/dssp.py"
     original = subprocess.run(["docker", "run", "--rm", "--network=none", "--cap-drop=ALL",
                                "--security-opt=no-new-privileges", report["image"], "cat", "/testbed/" + path],
                               capture_output=True, text=True, timeout=60, check=True).stdout
     modified = original
     for event in case["events"]:
         arguments = event.payload["arguments"]
+        if event.kind != "str_replace_editor" or arguments.get("command") != "str_replace" or arguments["path"] != case["source"]["task"]["source_workspace"] + "/" + path:
+            raise RuntimeError("Source repair requires same-file recorded replacement edits")
         if modified.count(arguments["old_str"]) != 1:
             raise RuntimeError("Recorded edit does not uniquely match pinned application source")
         modified = modified.replace(arguments["old_str"], arguments["new_str"])
-    fixed = modified.replace(edit["new_str"], edit["old_str"])
+    if args.case == "pyfilesystem-installed-opener":
+        anchor = "        should_fallback = not entry_point_found or entry_point_error is not None"
+        if modified.count(anchor) != 1:
+            raise RuntimeError("Expected installed-plugin fallback decision was not unique")
+        fixed = modified.replace(anchor, "        if entry_point_found and entry_point_error is not None:\n"
+                                 "            raise entry_point_error\n"
+                                 "        should_fallback = not entry_point_found")
+    else:
+        fixed = modified.replace(edit["new_str"], edit["old_str"])
     repair = "".join(difflib.unified_diff(modified.splitlines(keepends=True), fixed.splitlines(keepends=True),
                                         fromfile="a/" + path, tofile="b/" + path))
     repair_path = output / "source_fix.patch"
@@ -121,7 +135,7 @@ def main():
     run("fixed_again", test)
     assert fixture.read_bytes() == fixture_bytes and source.read_bytes() == source_bytes
     assert task_path.read_bytes() == task_bytes
-    report.update(complete=True, passed=True, original_events=len(full["events"]), remaining_events=len(reduced["events"]),
+    report.update(complete=True, passed=True, original_events=len(full["events"]), search_input_events=len(search_input["events"]), remaining_events=len(reduced["events"]),
                   fixture_unchanged=True, input_unchanged=True, task_and_oracle_unchanged=True,
                   minimized_sha256=hashlib.sha256(fixture_bytes).hexdigest(), reduction=reduced["reduction"])
     checkpoint()

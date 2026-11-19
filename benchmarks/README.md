@@ -8,13 +8,13 @@ From the repository root, with the retained local fixtures and Docker running:
 .\.venv\Scripts\python.exe -m benchmarks.real_regressions
 ```
 
-The default runs each verified minimal failure, its empty-action control, and its explicitly passing edit-removal control three times. It also runs the real compatible Vermouth comparison once: 19 checks across both repositories. A passing suite verifies Chrolo's replay behavior: the known captured bugs must reproduce and every passing control must pass all configured tests. It does not rerun minimization or imply that the original agent bugs are fixed. The Vermouth check retains the deterministic legacy-tool fixture limitation documented below.
+The default runs each verified minimal failure, its empty-action control, and its explicitly passing edit-removal control three times. It also runs the real compatible Vermouth comparison once: 28 checks across three repositories. A passing suite verifies Chrolo's replay behavior: the known captured bugs must reproduce and every passing control must pass all configured tests. It does not rerun minimization or imply that the original agent bugs are fixed. Vermouth uses a deterministic legacy-tool fixture; PyFilesystem uses deterministic installed-plugin fixtures with an independent oracle. See the [PyFilesystem evidence](../docs/pyfilesystem-evidence.md), including both negative candidates.
 
-`benchmarks/real_regressions.json` names the two cases and binds their task/oracle definitions, minimized events, and comparison fixture to SHA-256 fingerprints. Source actions must remain an unchanged ordered subset of the retained public trace, and images must have full SHA-256 digests. Changed evaluators or fixtures require review and an explicit manifest update; they cannot silently replace a known case. Raw trace payloads remain ignored under `results/`.
+`benchmarks/real_regressions.json` names the three cases and binds their task/oracle definitions, minimized events, and comparison fixture to SHA-256 fingerprints. Source actions must remain an unchanged ordered subset of the retained public trace, and images must have full SHA-256 digests. Changed evaluators or fixtures require review and an explicit manifest update; they cannot silently replace a known case. Raw trace payloads remain ignored under `results/`.
 
 The command validates every fixture before Docker starts. Missing/invalid fixtures produce exit 2 and a failed report; failed or inconclusive checks produce exit 1; every check passing produces exit 0. A new report starts incomplete and unsuccessful, then is updated as each case finishes. Default local report: `results/real-regression-checks.json`. Exception messages, commands, and test payloads are omitted from that summary. Use `--repeat N` and `--output PATH` to adjust the run; comparisons run once.
 
-The ordinary test suite skips these two Docker checks. To run them through pytest, with one repetition per case plus the comparison:
+The ordinary test suite skips these three Docker checks. To run them through pytest, with one repetition per case plus the comparison:
 
 ```powershell
 $env:CHROLO_RUN_REAL_REGRESSIONS = '1'
@@ -25,6 +25,14 @@ Remove-Item Env:CHROLO_RUN_REAL_REGRESSIONS
 The checked-in manifest contains local paths and fingerprints only. It does not download datasets or publish fixtures, and the default CI test job does not execute recorded actions. Existing raw inputs/reports are prerequisites; the case-specific input builders and evidence instructions below describe their preparation. The manifest's PyHOCON input is the retained pinned cohort input `results/pyhocon-cohort-1-1097.json`.
 
 Verified on 2026-11-07: the default command passed all 19 checks; both opt-in pytest cases passed; the regular suite passed 194 tests with these two Docker cases skipped by default.
+
+Verified on 2026-11-19: the expanded default gate passed all 28 checks across
+PyHOCON, Vermouth, and PyFilesystem. Full suite: 291 passed, three opt-in Docker
+cases skipped. The new screen retained all three preselected PyFilesystem
+trajectories: two no-target-failure results and one action-dependent failure,
+each repeated three times. The positive case reduced 59 actions to four in 52
+checks; source-only error-propagation repair makes its generated test pass.
+See the [payload-free evidence summary](pyfilesystem_screening_summary.json).
 
 `python -m chrolo benchmark` runs deterministic synthetic cases. It reports reproduction reliability, preserved failure signatures, event reduction and check counts against a naïve single-pass deletion baseline, interaction records pruned when reduced executions no longer make those calls, strict replay of the minimized cassette, replay timing, fixture sizes, cassette consumption, safety rejection cases, and simulated-fix sensitivity.
 
@@ -183,6 +191,7 @@ and the pinned image available, run:
 
 ```powershell
 .\.venv\Scripts\python.exe -m benchmarks.real_source_repair_pilot --output-dir results/real-source-pilot
+.\.venv\Scripts\python.exe -m benchmarks.real_source_repair_pilot --case pyfilesystem-installed-opener --use-retained-minimal --output-dir results/pyfilesystem-source-pilot
 ```
 
 Choose a new output directory. The runner checks an empty-action control,
@@ -195,11 +204,12 @@ check finishes; raw fixtures, source patch, generated test, and logs stay local.
 `OpenHandsDockerRunner(repair_patch=...)` applies a nonempty source patch
 **after** recorded actions and **before** evaluation tests. The existing
 `reference_patch` still applies before actions. Neither option modifies the
-recorded action data. The pilot restores the legacy-compatible DSSP invocation
-in application source; it repairs the resulting repository, not the policy
-of the original coding agent. The oracle requires the exact two original
-failures with all 31 controls passing, or all 33 tests passing with exit 0;
-different errors and mixed outcomes are rejected.
+recorded action data. The Vermouth pilot restores the legacy-compatible DSSP
+invocation; the PyFilesystem pilot propagates an installed plugin's original
+error instead of falling back to a built-in opener. Both repair the resulting
+repository, not the original coding agent's policy. Each oracle requires its
+exact two original failures with all 31 controls passing, or all 33 tests
+passing with exit 0; different errors and mixed outcomes are rejected.
 
 This uses real recorded agent edits and a deterministic legacy executable
 fixture. It does not invoke an old DSSP installation or use a model-response

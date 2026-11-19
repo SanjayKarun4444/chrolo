@@ -27,6 +27,14 @@
       "comparison": "results/vermouth-legacy-comparison-input.json",
       "fixture_sha256": "3835576df1510aa2225d971208c0c34cc6e643f28863a04678031e28b3581dc4",
       "comparison_sha256": "a91fd1a58d37021bad56fa490f543908dec113c328048e1805bcfc8c78e5317b"
+    },
+    {
+      "name": "pyfilesystem-installed-opener",
+      "input": "results/pyfilesystem-validation/input-14-233.json",
+      "report": "results/pyfilesystem-validation/minimal-report.json",
+      "expected_events": ["action-0028", "action-0033", "action-0044", "action-0045"],
+      "remove_for_passing_control": ["action-0033"],
+      "fixture_sha256": "e3668ef950bff8487bc818544251ad7fed187441f16132ebeec8f9d402757caf"
     }
   ]
 }

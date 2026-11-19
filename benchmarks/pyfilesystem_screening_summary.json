@@ -1,0 +1,342 @@
+{
+  "format": "chrolo.pyfilesystem-screening-evidence.v1",
+  "validated_on": "2026-11-19",
+  "instance_id": "PyFilesystem__pyfilesystem2-232",
+  "repository": "PyFilesystem/pyfilesystem2",
+  "image": "swerebench/sweb.eval.x86_64.pyfilesystem_1776_pyfilesystem2-232@sha256:2caaf1ee58708265f81ef7334ad9809df5e9bf8bea9874b37fe4d332c2b35c0c",
+  "actual_image_python": "3.9.21",
+  "metadata_python": "3.6",
+  "dataset": "nebius/SWE-rebench-openhands-trajectories",
+  "dataset_revision": "35455389ab51bf5e2306bfd436ef72d0f98bf882",
+  "selection_rule": "All three PyFilesystem entries in the retained historical 61-candidate index; index filtered for unresolved runs and nonempty patches, not a random sample",
+  "manifest_sha256": "c5e830984cf3cba913c6f797d1b284f28e8f9228866a44dc9a7b89626c12a283",
+  "repeat": 3,
+  "counts": {
+    "action_dependent_failure": 1,
+    "no_target_failure": 2,
+    "empty_control_rejected": 0,
+    "inconclusive": 0,
+    "unstable": 0,
+    "pending": 0
+  },
+  "cases": [
+    {
+      "trajectory_id": "chatcmpl-aa6d082930c84066c8345f0bd57310ec",
+      "actions": 50,
+      "outcome": "no_target_failure",
+      "attempts": [
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 50,
+          "trajectory_id": "chatcmpl-aa6d082930c84066c8345f0bd57310ec",
+          "outcome": "no_target_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "PASSED",
+            "PASSED"
+          ]
+        },
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 50,
+          "trajectory_id": "chatcmpl-aa6d082930c84066c8345f0bd57310ec",
+          "outcome": "no_target_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "PASSED",
+            "PASSED"
+          ]
+        },
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 50,
+          "trajectory_id": "chatcmpl-aa6d082930c84066c8345f0bd57310ec",
+          "outcome": "no_target_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "PASSED",
+            "PASSED"
+          ]
+        }
+      ]
+    },
+    {
+      "trajectory_id": "chatcmpl-ef3487aaac5c33c9b1d75fc6a11d52bb",
+      "actions": 56,
+      "outcome": "no_target_failure",
+      "attempts": [
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 56,
+          "trajectory_id": "chatcmpl-ef3487aaac5c33c9b1d75fc6a11d52bb",
+          "outcome": "no_target_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "PASSED",
+            "PASSED"
+          ]
+        },
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 56,
+          "trajectory_id": "chatcmpl-ef3487aaac5c33c9b1d75fc6a11d52bb",
+          "outcome": "no_target_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "PASSED",
+            "PASSED"
+          ]
+        },
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 56,
+          "trajectory_id": "chatcmpl-ef3487aaac5c33c9b1d75fc6a11d52bb",
+          "outcome": "no_target_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "PASSED",
+            "PASSED"
+          ]
+        }
+      ]
+    },
+    {
+      "trajectory_id": "chatcmpl-4762a556898f208eff83f397373c6ca4",
+      "actions": 59,
+      "outcome": "action_dependent_failure",
+      "attempts": [
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 59,
+          "trajectory_id": "chatcmpl-4762a556898f208eff83f397373c6ca4",
+          "outcome": "action_dependent_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "FAILED",
+            "FAILED"
+          ]
+        },
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 59,
+          "trajectory_id": "chatcmpl-4762a556898f208eff83f397373c6ca4",
+          "outcome": "action_dependent_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "FAILED",
+            "FAILED"
+          ]
+        },
+        {
+          "instance_id": "PyFilesystem__pyfilesystem2-232",
+          "actions": 59,
+          "trajectory_id": "chatcmpl-4762a556898f208eff83f397373c6ca4",
+          "outcome": "action_dependent_failure",
+          "empty_control_passed": true,
+          "passing_controls": 31,
+          "target_statuses": [
+            "FAILED",
+            "FAILED"
+          ]
+        }
+      ]
+    }
+  ],
+  "minimization": {
+    "original_events": 59,
+    "remaining_events": 4,
+    "checks": 52,
+    "shrink_percent": 93.22,
+    "failure_signature_preserved": true,
+    "one_minimal_under_tested_cascade_deletions": true,
+    "candidate_rejections": {
+      "runner_exception": 15,
+      "oracle_exception": 0,
+      "oracle_false": 24
+    }
+  },
+  "minimal_event_ids": [
+    "action-0028",
+    "action-0033",
+    "action-0044",
+    "action-0045"
+  ],
+  "regression_gate": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "pyhocon-packaging",
+        "passed": true,
+        "checks": [
+          {
+            "check": "1:empty",
+            "passed": true
+          },
+          {
+            "check": "1:minimal",
+            "passed": true
+          },
+          {
+            "check": "1:passing_control",
+            "passed": true
+          },
+          {
+            "check": "2:empty",
+            "passed": true
+          },
+          {
+            "check": "2:minimal",
+            "passed": true
+          },
+          {
+            "check": "2:passing_control",
+            "passed": true
+          },
+          {
+            "check": "3:empty",
+            "passed": true
+          },
+          {
+            "check": "3:minimal",
+            "passed": true
+          },
+          {
+            "check": "3:passing_control",
+            "passed": true
+          }
+        ]
+      },
+      {
+        "name": "vermouth-legacy-protocol",
+        "passed": true,
+        "checks": [
+          {
+            "check": "1:empty",
+            "passed": true
+          },
+          {
+            "check": "1:minimal",
+            "passed": true
+          },
+          {
+            "check": "1:passing_control",
+            "passed": true
+          },
+          {
+            "check": "2:empty",
+            "passed": true
+          },
+          {
+            "check": "2:minimal",
+            "passed": true
+          },
+          {
+            "check": "2:passing_control",
+            "passed": true
+          },
+          {
+            "check": "3:empty",
+            "passed": true
+          },
+          {
+            "check": "3:minimal",
+            "passed": true
+          },
+          {
+            "check": "3:passing_control",
+            "passed": true
+          },
+          {
+            "check": "comparison",
+            "passed": true
+          }
+        ]
+      },
+      {
+        "name": "pyfilesystem-installed-opener",
+        "passed": true,
+        "checks": [
+          {
+            "check": "1:empty",
+            "passed": true
+          },
+          {
+            "check": "1:minimal",
+            "passed": true
+          },
+          {
+            "check": "1:passing_control",
+            "passed": true
+          },
+          {
+            "check": "2:empty",
+            "passed": true
+          },
+          {
+            "check": "2:minimal",
+            "passed": true
+          },
+          {
+            "check": "2:passing_control",
+            "passed": true
+          },
+          {
+            "check": "3:empty",
+            "passed": true
+          },
+          {
+            "check": "3:minimal",
+            "passed": true
+          },
+          {
+            "check": "3:passing_control",
+            "passed": true
+          }
+        ]
+      }
+    ]
+  },
+  "source_repair": {
+    "passed": true,
+    "fixture_unchanged": true,
+    "input_unchanged": true,
+    "task_and_oracle_unchanged": true,
+    "steps": [
+      {
+        "label": "empty_control",
+        "exit_code": 0
+      },
+      {
+        "label": "minimize",
+        "exit_code": 0
+      },
+      {
+        "label": "before_fix",
+        "exit_code": 1
+      },
+      {
+        "label": "after_fix",
+        "exit_code": 0
+      },
+      {
+        "label": "invalid_repair_rejected",
+        "exit_code": 1
+      },
+      {
+        "label": "fixed_again",
+        "exit_code": 0
+      }
+    ],
+    "minimized_sha256": "f1734d310225818d26792226173267d3f5eb04db8a9b6d1f5caa6d32ee9beb2a"
+  },
+  "initial_image_control_issue": "pytest-randomly reordered directory-dependent original controls; disabled unrelated plugin autoload and set hash seed; all controls retained",
+  "scope": "Real recorded actions against the real registry with deterministic installed-plugin fixtures and an independent oracle; source repair is not agent-policy repair. Three correlated trajectories are one independent repository task, not a population reliability estimate."
+}

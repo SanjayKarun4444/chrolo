@@ -36,7 +36,10 @@ def test_builder_preserves_trace_and_existing_tests_but_uses_independent_signatu
     assert "original_issue" not in result["task"]["test_command"]
     # OpenHandsDockerRunner appends the selected targets/controls itself.
     assert result["task"]["test_command"] == task["install_config"]["test_cmd"]
-    # The published task environment is Python 3.6, not the dev interpreter.
+    assert result["task"]["environment"]["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+    assert result["task"]["environment"]["PYTHONHASHSEED"] == "0"
+    # Task metadata requests Python 3.6; retain syntax compatibility even when
+    # the downloaded image's actual interpreter is newer.
     ast.parse(ORACLE_SOURCE, feature_version=(3, 6))
 
 
