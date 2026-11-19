@@ -157,7 +157,7 @@ def replay_cmd(args):
     print("Replay completed")
     if capture.get("outcome", {}).get("status") == "exception":
         if isinstance(result, dict) and result.get("status") == "exception":
-            print(f"Captured exception observed: {result.get('exception_type', 'unknown')}")
+            print("Captured exception observed (details omitted; inspect the local trace if needed)")
         else:
             print("Captured exception did not recur")
     if args.oracle:

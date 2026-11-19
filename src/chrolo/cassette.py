@@ -216,7 +216,7 @@ class ReplaySession:
                 raise ValueError(f"Interaction at index {index} is missing required fields")
             interaction_id = _validate_name(raw["id"], "interaction id")
             if interaction_id in seen_ids:
-                raise ValueError(f"Duplicate interaction ID: {interaction_id}")
+                raise ValueError(f"Duplicate interaction ID at index {index}")
             seen_ids.add(interaction_id)
             if type(raw["sequence"]) is not int or raw["sequence"] != index:
                 raise ValueError(f"Interaction sequence at index {index} must equal {index}")

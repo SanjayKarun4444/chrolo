@@ -112,7 +112,8 @@ def test_capture_replay_and_minimize_exception_failure_without_serializing_messa
         "--oracle", "examples.failing_graph:original_failure",
     )
     assert replay.returncode == 0, replay.stderr
-    assert "Captured exception observed: builtins.RuntimeError" in replay.stdout
+    assert "Captured exception observed (details omitted" in replay.stdout
+    assert "builtins.RuntimeError" not in replay.stdout
     assert "Original failure detected: yes" in replay.stdout
 
     minimized = _cli(
