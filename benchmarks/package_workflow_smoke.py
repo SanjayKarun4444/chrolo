@@ -49,22 +49,27 @@ def main() -> None:
     run(["-m", "chrolo", "capture", "--graph", "workflow_fixture:build_graph", "--input", "input.json",
          "--record-interactions", "--output", "capture.json"])
     run(["-m", "chrolo", "replay", "capture.json", "--oracle", "workflow_fixture:original_failure", "--require-failure"])
-    run(["-m", "chrolo", "minimize", "capture.json", "--oracle", "workflow_fixture:original_failure",
-         "--output", "minimal.json", "--test", "test_regression.py"])
-    minimal = json.loads((workspace / "minimal.json").read_text())
+    run(["-m", "chrolo", "prepare", "capture.json", "--oracle", "workflow_fixture:original_failure",
+         "--output-dir", "regression"])
+    bundle = workspace / "regression"
+    if not json.loads((bundle / "summary.json").read_text())["complete"]:
+        raise RuntimeError("Packaged regression bundle was not completed")
+    minimal = json.loads((bundle / "minimal.json").read_text())
     if [event["id"] for event in minimal["events"]] != ["failure"] or len(minimal["interactions"]["interactions"]) != 1:
         raise RuntimeError("Packaged minimization did not prune the irrelevant event and call")
-    broken = run(["-m", "pytest", "-q", "test_regression.py"], expected=1)
+    broken = run(["-m", "pytest", "-q", "regression/test_regression.py"], expected=1)
     if "Original failure recurred" not in broken.stdout:
         raise RuntimeError("Generated test failed for a different reason")
-    (workspace / "broken_minimal.json").write_text(json.dumps(minimal, indent=2), encoding="utf-8")
+    (bundle / "broken_minimal.json").write_text(json.dumps(minimal, indent=2), encoding="utf-8")
     minimal["graph"] = "workflow_fixture:build_fixed_graph"
-    (workspace / "minimal.json").write_text(json.dumps(minimal, indent=2), encoding="utf-8")
-    run(["-m", "pytest", "-q", "test_regression.py"])
+    (bundle / "minimal.json").write_text(json.dumps(minimal, indent=2), encoding="utf-8")
+    run(["-m", "pytest", "-q", "regression/test_regression.py"])
     artifacts = output / "artifacts"
     artifacts.mkdir(exist_ok=True)
-    for name in ["workflow_fixture.py", "input.json", "capture.json", "minimal.json", "broken_minimal.json", "test_regression.py"]:
+    for name in ["workflow_fixture.py", "input.json", "capture.json"]:
         (artifacts / name).write_bytes((workspace / name).read_bytes())
+    for name in ["minimal.json", "broken_minimal.json", "test_regression.py", "README.md", "summary.json"]:
+        (artifacts / name).write_bytes((bundle / name).read_bytes())
     report = {"format": "chrolo.package-workflow-smoke.v1", "passed": True, "complete": True,
               "package_path": str(package_path), "interpreter": sys.executable, "workspace": str(workspace),
               "scope": "Clean installed-wheel CLI with stdlib model/tool fixtures outside the source checkout",

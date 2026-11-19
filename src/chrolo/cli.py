@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 
 from .core import Event, minimize, parse_events
 from .adapters_langgraph import (
@@ -18,7 +19,7 @@ from .adapters_langgraph import (
     OUTCOME_CAPTURE_FORMAT,
     PROVENANCE_CAPTURE_FORMAT,
 )
-from .cassette import RecordedCallError, ReplayMismatch
+from .cassette import RecordedCallError, ReplayMismatch, ReplaySession
 from .benchmark import run_benchmarks, run_dataset
 from .openhands_docker import benchmark_openhands_trace
 from .web import serve as serve_web
@@ -402,9 +403,65 @@ def minimize_cmd(args):
     print(f"Regression test: {args.test} (fails while bug remains)")
 
 
+def prepare_cmd(args):
+    """Prepare a local regression bundle from an existing wrapped capture."""
+    if args.output_dir.exists():
+        raise ValueError("Choose a new output directory; existing paths are not overwritten")
+    if args.max_checks < 2:
+        raise ValueError("Regression preparation needs at least two checks")
+    capture = _read_json(args.trace)
+    validate_capture(capture)
+    if capture.get("interactions") is None:
+        raise ValueError("prepare requires a recorded interaction cassette; capture wrapped calls with --record-interactions first")
+    ReplaySession.from_dict(capture["interactions"])
+    # Strictly reproduce the original capture before candidate-only call pruning.
+    replay_cmd(SimpleNamespace(trace=args.trace, allow_live_side_effects=False,
+                               oracle=args.oracle, require_failure=True))
+    args.output_dir.mkdir(parents=True, exist_ok=False)
+    summary = args.output_dir / "summary.json"
+    _write_json(summary, {"format": "chrolo.regression-bundle.v1", "complete": False})
+    # Raw replay data stays local until the developer explicitly reviews/promotes it.
+    (args.output_dir / ".gitignore").write_text("*\n", encoding="utf-8")
+    fixture = args.output_dir / "minimal.json"
+    test = args.output_dir / "test_regression.py"
+    minimize_cmd(SimpleNamespace(scenario=args.trace, run=None, trajectory_step=None,
+                                allow_live_side_effects=False, oracle=args.oracle,
+                                max_checks=args.max_checks, output=fixture, test=test))
+    reduced = _read_json(fixture)
+    reduction = reduced["reduction"]
+    (args.output_dir / "README.md").write_text(
+        "# Local Chrolo regression\n\n"
+        "Run `python -m pytest -q` with this folder's test_regression.py path from your project root.\n"
+        "The test is expected to fail with 'Original failure recurred' while the application bug remains.\n"
+        "Fix your application code at the same importable graph target, then rerun the same test.\n"
+        "No trace editing or new recording is needed when the fix preserves the recorded boundary calls.\n\n"
+        "A different request, missing call, or unused record is a replay mismatch, not proof of a fix.\n"
+        "If the fix changes boundary calls, capture a new run and check the failure oracle again.\n"
+        "Keep the project importable in the same environment. Wrapped calls replay offline; trusted graph code can still run unwrapped effects.\n\n"
+        "minimal.json contains raw recorded data. This folder is ignored by Git. Review and scan it before sharing or explicitly promoting fixtures/tests.\n"
+        "summary.json reports preservation/minimality, not a globally smallest or universally reproducible case.\n",
+        encoding="utf-8")
+    _write_json(summary, {"format": "chrolo.regression-bundle.v1", "complete": True,
+                          "failure_preserved": True, "strict_replay_verified": True,
+                          "original_events": reduction["original_events"],
+                          "remaining_events": reduction["remaining_events"],
+                          "original_interactions": reduced["interaction_reduction"]["original_interactions"],
+                          "remaining_interactions": reduced["interaction_reduction"]["remaining_interactions"],
+                          "one_minimal_under_tested_cascade_deletions": reduction["one_minimal_under_tested_cascade_deletions"],
+                          "checks": reduction["checks"], "artifacts": {"fixture": "minimal.json", "test": "test_regression.py", "instructions": "README.md"}})
+    print("Local regression bundle ready; the generated test is expected to fail until the application bug is fixed")
+    print(f"Bundle: {args.output_dir}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Chrolo: reduce agent failures to regression tests")
     command = parser.add_subparsers(dest="command", required=True)
+    prepare = command.add_parser("prepare", help="Verify and minimize a cassette-backed capture into a local regression bundle")
+    prepare.add_argument("trace", type=Path)
+    prepare.add_argument("--oracle", required=True, help="Importable module:function detecting the original failure")
+    prepare.add_argument("--output-dir", required=True, type=Path, help="New directory for local, Git-ignored regression artifacts")
+    prepare.add_argument("--max-checks", type=int, default=1000)
+    prepare.set_defaults(handler=prepare_cmd)
     cap = command.add_parser("capture", help="Capture a safe, deterministic LangGraph-compatible run")
     cap.add_argument("--graph", required=True, help="Trusted graph factory module:function")
     cap.add_argument("--input", required=True, type=Path, help="JSON with initial_state and events")

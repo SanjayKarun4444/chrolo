@@ -1,5 +1,6 @@
 # Examples
 
+- `pilot_ticket_agent.py` + `pilot_ticket_input.json`: [developer-project walkthrough](../docs/pilot-workflow.md) using `chrolo prepare`; fix only application code and rerun the unchanged generated test. Uses a stdlib graph-compatible fixture, with no SDK or LangGraph requirement.
 - `scenario.json` + `buggy_agent.py`: dependency-preserving reduction without LangGraph.
 - `langgraph_input.json` + `langgraph_issue_agent.py`: **real LangGraph** state graph example (needs the `langgraph` extra). Graph deliberately exhibits the stale-cache bug.
 - `fake_graph.py`: **test-only protocol shim** to test adapter behavior when LangGraph is not installed. This is *not* an actual LangGraph integration.

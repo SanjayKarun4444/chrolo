@@ -15,6 +15,10 @@ pip install -e '.[dev]'
 pytest -q
 ```
 
+## Pilot workflow
+
+Follow the [project walkthrough](docs/pilot-workflow.md) to capture a failure, run `chrolo prepare`, and fix application code while rerunning the same generated test. The command strictly verifies a cassette-backed failure and creates a local bundle with a minimized fixture, pytest test, instructions, and completion summary. The walkthrough requires no hosted provider or API key.
+
 ## First example (no LangGraph dependency)
 
 ```bash
