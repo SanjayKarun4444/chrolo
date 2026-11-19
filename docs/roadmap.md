@@ -2,11 +2,11 @@
 
 Current implementation and resume checkpoint: [progress.md](progress.md).
 
-## Active priorities (2026-11-18)
+## Active priorities (2026-11-19)
 
 The three supported SDK/LangGraph capture-to-generated-test workflows and a separate installed-wheel workflow are verified locally. Two independent action-dependent real-agent cases have a repeatable 19-check gate. Historical checkpoints below retain the sequence of that work; pending statements in those checkpoints do not override this status.
 
-1. Try the [pilot workflow](pilot-workflow.md) on a real developer project and address observed friction. The documented `chrolo prepare` path and an automated synthetic project outside the checkout now pass from the installed wheel: generated pytest fails before a source-only application fix and passes afterward, with capture and fixture bytes unchanged. Full suite: 280 passed, two opt-in Docker skips; installed-wheel core and 21 SDK/LangGraph checks pass. An external developer trial and hosted CI remain unverified.
+1. Try the [pilot workflow](pilot-workflow.md) on a real developer project and address observed friction. The cassette-backed installed-wheel path and synthetic invoice simulation pass. A separate real-action Vermouth pilot now reduces 68 actions to two and verifies generated pytest before/after a repository source repair, keeping input, minimized fixture, and oracle unchanged. This uses the existing deterministic legacy executable fixture and repairs repository source rather than agent policy; it is not a new independent case or model cassette. Full suite: 284 passed, two opt-in Docker skips; seven added oracle checks pass separately. An external developer trial, packaging of the new source-repair integration, and hosted CI remain unverified.
 2. Validate the new PyFilesystem installed-opener oracle on the actual image/full trajectories; only synthetic contract checks have run. Prepare task-specific oracles for JWST, SOSW, and CEKit. The frozen-selection multi-repository screening harness is implemented and the 11 existing inputs pass preflight; new task execution remains open. Retain negative/inconclusive cases and require passing empty controls before minimization.
 3. Keep experimental scope explicit. Publishing and physical-phone QA remain deferred; commit completed work locally without pushing.
 

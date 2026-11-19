@@ -142,3 +142,10 @@ report. Without event context four events reduce to three and all three calls
 remain; with context four events reduce to the two required receipt events and
 three calls reduce to two. This is automated synthetic usability evidence;
 an external developer trial remains open.
+
+The [real-action source-repair pilot](../benchmarks/README.md#real-action-generated-regression-and-source-repair)
+separately exercises the retained Vermouth coding-agent trajectory through
+Docker replay and generic pytest generation. Its 68 actions reduce to two;
+restoring compatible application source makes the unchanged test pass. This
+path uses executable task replay rather than a model-response cassette, so it
+does not use `prepare` or establish cassette capture of arbitrary coding agents.

@@ -117,6 +117,14 @@ for event in request["actions"]:
     else:
         raise ValueError("unsupported action kind")
 
+repair_patch = request.get("repair_patch")
+if repair_patch is not None:
+    patched = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=root,
+                             input=repair_patch, text=True, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, timeout=request["test_timeout"])
+    if patched.returncode != 0:
+        raise RuntimeError("source repair patch could not be applied")
+
 test_patch = request.get("test_patch")
 if test_patch:
     patched = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=root,
@@ -161,6 +169,7 @@ class OpenHandsDockerRunner:
         source_workspace: str | None = None,
         environment: Mapping[str, str] | None = None,
         test_patch: str | None = None,
+        repair_patch: str | None = None,
     ) -> None:
         if not isinstance(image, str) or not image.strip():
             raise ValueError("Docker image must be a non-empty string")
@@ -195,6 +204,9 @@ class OpenHandsDockerRunner:
         if test_patch is not None and not isinstance(test_patch, str):
             raise ValueError("test_patch must be a string")
         self.test_patch = test_patch
+        if repair_patch is not None and (not isinstance(repair_patch, str) or not repair_patch.strip()):
+            raise ValueError("repair_patch must be a non-empty string")
+        self.repair_patch = repair_patch
         self.environment = dict(environment or {})
         self.image = image
         self.fail_to_pass = list(fail_to_pass)
@@ -268,6 +280,7 @@ class OpenHandsDockerRunner:
             "reference_patch": self.reference_patch,
             "source_workspace": self.source_workspace,
             "test_patch": self.test_patch,
+            "repair_patch": self.repair_patch,
         }
         container_name = f"chrolo-replay-{uuid.uuid4().hex}"
         argv = self.docker_argv(container_name)

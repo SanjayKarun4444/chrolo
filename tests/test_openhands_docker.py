@@ -57,6 +57,12 @@ def test_runner_rejects_invalid_environment(environment):
         _runner(environment=environment)
 
 
+@pytest.mark.parametrize("repair", ["", "  ", 17, {}])
+def test_runner_rejects_invalid_source_repair(repair):
+    with pytest.raises(ValueError, match="repair_patch"):
+        _runner(repair_patch=repair)
+
+
 def test_container_editor_matches_openhands_create_unique_replace_insert_and_undo(tmp_path):
     existing = tmp_path / "existing.txt"
     existing.write_text("alpha\nbeta\n", encoding="utf-8")
@@ -68,6 +74,9 @@ def test_container_editor_matches_openhands_create_unique_replace_insert_and_und
     patch_target = tmp_path / "patchme.txt"
     patch_target.write_text("unfixed\n", encoding="utf-8")
     actions = [
+        {"id": "edit-before-repair", "kind": "str_replace_editor", "payload": {"arguments": {
+            "command": "str_replace", "path": str(patch_target), "old_str": "fixed", "new_str": "after-action",
+        }}},
         {"id": "outside-workspace", "kind": "str_replace_editor", "payload": {"arguments": {
             "command": "create", "path": str(tmp_path.parent / "outside-chrolo.txt"), "file_text": "blocked",
         }}},
@@ -112,7 +121,7 @@ def test_container_editor_matches_openhands_create_unique_replace_insert_and_und
             "--- a/patchme.txt\n"
             "+++ b/patchme.txt\n"
             "@@ -1 +1 @@\n"
-            "-fixed\n"
+            "-repaired\n"
             "+tests-ready\n"
         ),
         "reference_patch": (
@@ -122,6 +131,11 @@ def test_container_editor_matches_openhands_create_unique_replace_insert_and_und
             "@@ -1 +1 @@\n"
             "-unfixed\n"
             "+fixed\n"
+        ),
+        "repair_patch": (
+            "diff --git a/patchme.txt b/patchme.txt\n"
+            "--- a/patchme.txt\n+++ b/patchme.txt\n"
+            "@@ -1 +1 @@\n-after-action\n+repaired\n"
         ),
     }
     completed = subprocess.run(
@@ -161,7 +175,8 @@ def test_runner_sends_only_candidate_actions_and_returns_task_test_statuses(monk
         {"id": "editor", "kind": "str_replace_editor", "payload": {"arguments": {"command": "view", "path": "src/a.py"}}},
     ])
 
-    result = _runner()(events)
+    result = _runner(repair_patch="source fix")(events)
+    assert seen["request"]["repair_patch"] == "source fix"
     assert [action["id"] for action in seen["request"]["actions"]] == ["shell", "editor"]
     assert seen["request"]["test_command"] == ["pytest", "--no-header", "-rA", "--tb=line"]
     assert result["failed_to_pass"] == [FAIL]

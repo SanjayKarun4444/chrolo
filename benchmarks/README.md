@@ -176,6 +176,43 @@ The input builder retains the dataset's `test_patch`, which the runner applies a
 
 The CLI input joiner retains the task's official patch. The benchmark applies it in a separate fresh container before replaying the minimized trace and repeats the exact failure-oracle check, reporting fix sensitivity. This is an intervention against the original task oracle, rather than a simulated corrected trace. The runner and orchestration have unit coverage with mocked Docker/runner processes and a syntax check for the in-container helper. The editor emulates `create` without overwriting, unique-only `str_replace`, line-based `insert`, and per-file `undo_edit`; `view` is read-only. These semantics follow the [OpenHands `str_replace_editor` specification](https://github.com/togethercomputer/OpenHands/blob/main/openhands/agenthub/codeact_agent/tools/str_replace_editor.py) and are tested by running the in-container helper against a temporary fixture. The builder maps recorded `/workspace/<repo>` paths to the task image's `/testbed`, including absolute paths inside shell commands. Historical pre-validation status: Docker execution was initially deferred. Subsequent local runs validated the repaired PlasmaFAIR image and the two independent action-dependent cases documented above. PlasmaFAIR reduces to zero actions and cannot establish an agent-caused regression; use the current case-specific controls and regression gate when assessing evidence.
 
+## Real-action generated regression and source repair
+
+With the fingerprinted local Vermouth fixtures from `real_regressions.json`
+and the pinned image available, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.real_source_repair_pilot --output-dir results/real-source-pilot
+```
+
+Choose a new output directory. The runner checks an empty-action control,
+minimizes the full recorded trajectory through the generic `chrolo minimize`
+interface, and generates a pytest regression. It expects `Original failure
+recurred` before the repair, all targets and controls passing afterward, and
+an invalid repair to fail execution. Reports remain incomplete until every
+check finishes; raw fixtures, source patch, generated test, and logs stay local.
+
+`OpenHandsDockerRunner(repair_patch=...)` applies a nonempty source patch
+**after** recorded actions and **before** evaluation tests. The existing
+`reference_patch` still applies before actions. Neither option modifies the
+recorded action data. The pilot restores the legacy-compatible DSSP invocation
+in application source; it repairs the resulting repository, not the policy
+of the original coding agent. The oracle requires the exact two original
+failures with all 31 controls passing, or all 33 tests passing with exit 0;
+different errors and mixed outcomes are rejected.
+
+This uses real recorded agent edits and a deterministic legacy executable
+fixture. It does not invoke an old DSSP installation or use a model-response
+cassette, and is separate from the cassette-backed `chrolo prepare` pilot.
+
+The 2026-11-19 verified run reduced 68 actions to two in 12 checks. Generated
+pytest exited 1 with the original failure before the source repair and 0 after
+it, twice; all 31 controls passed. The invalid-patch negative check exited 1.
+Input, minimized fixture, task, and oracle remained unchanged. Local evidence:
+ignored `results/real_source_repair_pilot_verified/`. An earlier patch-generation
+attempt was rejected for missing surrounding file context; its report remains
+incomplete under `results/real_source_repair_pilot/`.
+
 ## AgentFailureBench paired trace-difference integration
 
 The [AgentFailureBench dataset](https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench) supplies synthetic failed and corrected tool trajectories. Chrolo's builder includes only records with an exact tool-call or tool-output difference, then treats the recorded difference as a witness. It replays those recorded observations and does not execute tools, recreate an environment, or establish task success/failure independently. The upstream dataset describes its traces as procedurally generated and documents the corresponding limitations in [`LIMITATIONS.md`](https://huggingface.co/datasets/fahadhafeezofficial/agent-failure-bench/blob/main/LIMITATIONS.md).
