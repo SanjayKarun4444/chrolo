@@ -92,6 +92,20 @@ small check budget was used.
 5. Capture once, then run `prepare` with your factory/oracle names. Run the
    generated test before and after fixing your application code.
 
+When multiple events make identical boundary requests, attach stable per-event
+context at recording time so minimization can distinguish their responses:
+
+```python
+receipt = boundaries.call(
+    "tool", "payments.lookup_receipt", event["payload"], lookup,
+    context={"event_id": event["id"]},
+)
+```
+
+Use the same context during replay. Without it, ambiguous repeated calls can
+prevent otherwise unnecessary events from being removed. The reported
+minimality covers tested replayable deletions, not every possible smaller input.
+
 The pilot requires a cassette-backed capture. Input-only, filtered, redacted,
 malformed, and non-reproducing captures are rejected before bundle creation.
 A fix that changes the recorded boundary requests or call order may invalidate
@@ -105,3 +119,26 @@ captures/fixtures before sharing or explicitly promoting a test and fixture to
 version control. The scanner is heuristic; redaction/filtering can remove data
 needed for replay. Publishing, hosted CI execution, and arbitrary side-effect
 capture are outside this pilot.
+
+## Repeatable developer simulation
+
+`benchmarks/simulate_developer_pilot.py` creates a separate invoice-processing
+project outside the checkout and uses a non-editable installed Chrolo wheel.
+Its synthetic retry bug applies the same receipt twice to a local ledger;
+no real payment occurs. Run with the wheel environment's Python and new output
+directories:
+
+```powershell
+python benchmarks/simulate_developer_pilot.py --output-dir results/invoice-pilot-plain
+python benchmarks/simulate_developer_pilot.py --event-context --output-dir results/invoice-pilot-context
+```
+
+Both simulations check failing pytest before the source-only fix and passing
+pytest afterward, unchanged capture/fixture bytes, zero replay callbacks,
+refusal to overwrite the bundle, and rejection of changed requests and
+unrelated application errors. Socket connections are blocked. Each keeps logs,
+buggy/fixed source, fixtures, generated test, and an incomplete-until-finished
+report. Without event context four events reduce to three and all three calls
+remain; with context four events reduce to the two required receipt events and
+three calls reduce to two. This is automated synthetic usability evidence;
+an external developer trial remains open.
