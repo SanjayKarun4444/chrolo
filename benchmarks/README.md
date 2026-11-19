@@ -38,6 +38,48 @@ The dataset schema is demonstrated in [`../examples/benchmark_dataset.json`](../
 
 Compare runs from the same environment. Replay timing and fixture sizes are descriptive measurements; they do not by themselves establish that a minimized trace preserves the intended failure. Review the oracle, repeated reproduction rate, accepted result, and post-fix sensitivity for each case.
 
+## Multi-repository cohort screening
+
+Reviewed 2026-11-18: raw-byte hashes still freeze each artifact, while canonical JSON identities prevent formatting-only duplicates from inflating the selected-case count. Both freeze and execution preflight reject these duplicates. The retained 11-input retrospective selection passes preflight; it has not gained any new real-task execution evidence in this review.
+
+`benchmarks.run_task_cohort` freezes prepared OpenHands inputs before repeated screening. Each input must declare its repository/task and `evaluation.kind`, use a full image digest, contain actions, and specify nonempty disjoint target/control tests. The manifest binds raw input bytes with SHA-256 and records the selection reason. Freeze validates configuration without calling Docker and refuses to overwrite a prior selection:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.run_task_cohort freeze results/case-a.json results/case-b.json --reason "All cases selected by the documented cohort rule" --output results/task-selection.json
+```
+
+With prepared images and Docker available, execute that exact selection:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.run_task_cohort run results/task-selection.json --repeat 3 --output results/task-cohort-report.json
+```
+
+Every input is validated before any execution. Each repetition uses a fresh runner, checks an empty-action control, then executes the full trace only if all empty targets/controls pass. Reports preserve the full selection and each completed attempt, group results by repository, task, and declared failure mode, and retain pending cases if interrupted. Counts distinguish action-dependent failure, no target failure, rejected empty control, inconclusive execution, and unstable repeated outcomes. An inconsistent repetition never counts as a confirmed failure. Errors expose their class rather than private exception messages. Atomic report updates invalidate old success before fixture validation. Output paths cannot overwrite inputs or the manifest.
+
+Exit 0 means a completed decisive screen (failures or passing traces); 1 means an inconclusive, unstable, or rejected-control case; 2 means invalid configuration/fixtures. A completed screen is not a passing regression suite. This command does not minimize new positive cases or prove fix sensitivity; use `benchmark-openhands --require-action-dependence` and the paired regression gates for that additional evidence.
+
+Local preparation on 2026-11-12: `results/task-cohort-retrospective-selection.json` freezes all nine previously screened PyHOCON inputs and the two previously evaluated Vermouth failure/comparison inputs. All 11 pass preflight without Docker. Their outcomes were already known: this is retrospective infrastructure validation, not new independent benchmark evidence. Separately, `results/cross-repository-candidate-plan.json` retains every one of the historical index's 61 candidates across six repository tasks, including candidates still lacking prepared oracles. That index was filtered for unresolved runs/nonempty patches and is not a random sample. Four additional tasks (JWST, SOSW, CEKit, and PyFilesystem) still need validated task-specific runners/oracles and passing empty controls before broadening reliability claims. No new Docker screening was run for this milestone.
+
+## PyFilesystem candidate oracle (not task-image validated)
+
+`benchmarks/build_pyfilesystem_entrypoint_input.py` defines an independent property for `PyFilesystem__pyfilesystem2-232`: an installed `osfs` opener's load or constructor failure must remain an `EntryPointError` caused by the injected marker, rather than silently selecting a built-in opener. The two parametrized targets fail only when the expected fixture calls occur and a different valid `Opener` is returned. Different exceptions, wrong causes, missing calls, and invalid results become `SKIPPED`/inconclusive. A healthy installed-opener control verifies fresh instances without opening filesystems.
+
+The candidate came from static inspection of the retained fallback patches, not a reproduced container failure. All three indexed PyFilesystem candidates are retained in local `results/pyfilesystem-oracle/preparation.json`, with patch fingerprints. Full traces are unavailable locally, network retrieval failed, the image has no verified digest, and Docker is unavailable. Synthetic registry fixtures validate the oracle's classification behavior; they do not execute real PyFilesystem code or establish a third real-agent regression case.
+
+Write the standalone oracle without executing repository code:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.build_pyfilesystem_entrypoint_input oracle --output results/pyfilesystem-oracle/test_chrolo_entrypoint_errors.py
+```
+
+Once a full trajectory, matching task metadata JSON, and verified image digest are available, prepare a replay input:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.build_pyfilesystem_entrypoint_input prepare --trace-json results/pyfilesystem-full-trace.json --task-json results/pyfilesystem-task.json --image "TASK_IMAGE_NAME@sha256:VERIFIED_DIGEST" --output results/pyfilesystem-entrypoint-input.json
+```
+
+The placeholder image must be replaced by the metadata's exact image name plus its verified full digest. The builder rejects patches without recorded actions, wrong task/repository/image identities, and oracle-path collisions. It preserves the original actions and evaluation test patch, uses all 30 existing passing controls plus its healthy-plugin control, and removes the issue reference patch because it is not a verified fix for this independent property. The emitted test module is compatible with the task metadata's Python 3.6 environment. Image environment setup and exact control behavior remain unvalidated. Require passing empty controls before full replay, then repeated minimization and edit-removal controls before counting new evidence.
+
 ## Executable synthetic task-oracle cases
 
 Run `python -m chrolo benchmark --dataset examples/task_oracle_dataset.json --repeat 20` for three reproducible task failures backed by an in-memory tool environment. Unlike the AgentFailureBench trace-differential adapter, this runner executes selected tool calls against a fresh mutable task state on every candidate and checks the resulting task state: wrong ticket assignment, duplicate invoice payment, or deletion of a protected file. Tool outputs can feed later tool arguments through explicit event references, and those dependencies constrain minimization. Paired fixed runners correct or skip the faulty action and should clear the original signature.
@@ -132,7 +174,7 @@ The input builder retains the dataset's `test_patch`, which the runner applies a
 
 `chrolo.openhands.extract_actions` converts a row from the OpenHands trajectory corpus into ordered Chrolo events. `OpenHandsDockerRunner` starts a new container for each candidate with networking disabled, no host bind mounts, dropped capabilities, no-new-privileges, and CPU, memory, PID, per-action, test, and overall time limits. It executes the recorded Bash commands and the sample's `view`, `create`, and `str_replace` editor operations, then reports test statuses from the configured pytest command. A runner timeout removes its named container. Only pytest `FAILED` counts toward the original failure signature; `ERROR`, `SKIPPED`, and `PASSED` do not. The benchmark requires every configured `FAIL_TO_PASS` test to fail on baseline and every `PASS_TO_PASS` control to pass. Its paired `failure_oracle` then requires that exact failure set and all passing controls for each candidate.
 
-The CLI input joiner retains the task's official patch. The benchmark applies it in a separate fresh container before replaying the minimized trace and repeats the exact failure-oracle check, reporting fix sensitivity. This is an intervention against the original task oracle, rather than a simulated corrected trace. The runner and orchestration have unit coverage with mocked Docker/runner processes and a syntax check for the in-container helper. The editor emulates `create` without overwriting, unique-only `str_replace`, line-based `insert`, and per-file `undo_edit`; `view` is read-only. These semantics follow the [OpenHands `str_replace_editor` specification](https://github.com/togethercomputer/OpenHands/blob/main/openhands/agenthub/codeact_agent/tools/str_replace_editor.py) and are tested by running the in-container helper against a temporary fixture. The builder maps recorded `/workspace/<repo>` paths to the task image's `/testbed`, including absolute paths inside shell commands. The workflow has **not** been run against the SWE-rebench image. Keep real-agent reliability claims open until the published task image validates replay and the reference-patch intervention. Docker was left stopped at the user's request.
+The CLI input joiner retains the task's official patch. The benchmark applies it in a separate fresh container before replaying the minimized trace and repeats the exact failure-oracle check, reporting fix sensitivity. This is an intervention against the original task oracle, rather than a simulated corrected trace. The runner and orchestration have unit coverage with mocked Docker/runner processes and a syntax check for the in-container helper. The editor emulates `create` without overwriting, unique-only `str_replace`, line-based `insert`, and per-file `undo_edit`; `view` is read-only. These semantics follow the [OpenHands `str_replace_editor` specification](https://github.com/togethercomputer/OpenHands/blob/main/openhands/agenthub/codeact_agent/tools/str_replace_editor.py) and are tested by running the in-container helper against a temporary fixture. The builder maps recorded `/workspace/<repo>` paths to the task image's `/testbed`, including absolute paths inside shell commands. Historical pre-validation status: Docker execution was initially deferred. Subsequent local runs validated the repaired PlasmaFAIR image and the two independent action-dependent cases documented above. PlasmaFAIR reduces to zero actions and cannot establish an agent-caused regression; use the current case-specific controls and regression gate when assessing evidence.
 
 ## AgentFailureBench paired trace-difference integration
 

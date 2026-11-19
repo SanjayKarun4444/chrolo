@@ -44,3 +44,7 @@ jobs:
         run: |
           .wheel-smoke/bin/python -m pip install 'pytest>=8,<10'
           .wheel-smoke/bin/python benchmarks/package_workflow_smoke.py --output-dir "$RUNNER_TEMP/packaged-workflow"
+      - name: Check installed-wheel SDK and LangGraph workflows
+        run: |
+          .wheel-smoke/bin/python -c "import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', glob.glob('dist/*.whl')[0] + '[langgraph,openai,anthropic]'])"
+          .wheel-smoke/bin/python benchmarks/package_provider_smoke.py --output-dir "$RUNNER_TEMP/packaged-providers"

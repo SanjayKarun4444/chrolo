@@ -2,6 +2,14 @@
 
 Current implementation and resume checkpoint: [progress.md](progress.md).
 
+## Active priorities (2026-11-18)
+
+The three supported SDK/LangGraph capture-to-generated-test workflows and a separate installed-wheel workflow are verified locally. Two independent action-dependent real-agent cases have a repeatable 19-check gate. Historical checkpoints below retain the sequence of that work; pending statements in those checkpoints do not override this status.
+
+1. Build and try the pilot workflow: one documented path from a developer's captured failure to a minimal case and a regression test, with useful failure messages and no manual trace editing. Normal wheel dependency installation and both installed-wheel checks now pass locally; hosted CI remains unverified until publication is authorized.
+2. Validate the new PyFilesystem installed-opener oracle on the actual image/full trajectories; only synthetic contract checks have run. Prepare task-specific oracles for JWST, SOSW, and CEKit. The frozen-selection multi-repository screening harness is implemented and the 11 existing inputs pass preflight; new task execution remains open. Retain negative/inconclusive cases and require passing empty controls before minimization.
+3. Keep experimental scope explicit. Publishing and physical-phone QA remain deferred; commit completed work locally without pushing.
+
 ## Product goal
 
 Chrolo turns a failed agent execution into a small, reviewable, deterministic regression case. A developer should be able to identify the failure, determine which inputs and external interactions were necessary, replay it without contacting live providers or repeating tool side effects, and keep a test that detects the bug after the agent code changes.
@@ -20,7 +28,7 @@ The product claim should remain precise: Chrolo minimizes a captured execution w
 
 ## Current foundation
 
-M0 provides dependency-preserving input event minimization and pytest generation using a caller-supplied deterministic runner and failure oracle. M1 adds experimental LangGraph-compatible input-event capture and replay: it invokes a fresh graph with a reduced input event list; full state snapshots are opt-in. M2 adds a framework-neutral cassette for explicitly wrapped model/tool calls and LangGraph integration. Provider SDKs and arbitrary side effects remain outside capture.
+M0 provides dependency-preserving input event minimization and pytest generation using a caller-supplied deterministic runner and failure oracle. M1 adds experimental LangGraph-compatible input-event capture and replay: it invokes a fresh graph with a reduced input event list; full state snapshots are opt-in. M2 adds a framework-neutral cassette for explicitly wrapped model/tool calls and LangGraph integration. Explicit wrappers cover buffered synchronous OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages; arbitrary unwrapped side effects remain outside capture.
 
 The M1 contract stabilization work clarifies malformed event rejection and distinguishes baseline runner errors from baseline oracle errors. Candidate exceptions are rejected as non-reproductions. The M1 suite has been exercised with the real LangGraph integration when that optional dependency is installed.
 

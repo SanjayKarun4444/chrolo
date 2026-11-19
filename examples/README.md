@@ -59,3 +59,13 @@ Local Chat Completions artifacts are retained in ignored `results/chat_provider_
 ```
 
 The script rejects an editable/source import, runs the installed CLI from a temporary directory outside the checkout with only a copied standard-library fixture module on its import path, and checks capture, required-failure replay, minimization, and the generated test's expected failure then success. It requires no SDK extras or hosted providers. This is a packaged core-workflow check; the SDK/LangGraph matrix is tested separately. The report and copied artifacts are retained under the output directory. The existing package-smoke CI job now includes this step; the workflow file parses locally, but GitHub CI has not run in this local-only milestone.
+
+`benchmarks/package_provider_smoke.py` adds the actual SDK/LangGraph matrix to the installed-wheel check. Install the wheel with its `langgraph,openai,anthropic` extras and pytest in a clean environment, then run:
+
+```powershell
+.\results\package_workflow_release\venv\Scripts\python.exe benchmarks/package_provider_smoke.py --output-dir results/package_provider_release
+```
+
+The script copies only the three fixture examples, shared input, and integration tests into a temporary directory outside the checkout. It verifies that pytest imports Chrolo from the environment, requires every SDK dependency, and requires all 21 tests to pass without skips. Tests include generated pytest before/after the fix, unchanged replay callback counters, provider/tool error replay, corrupt cassettes, and cross-interface rejection. Reports include package versions and pytest XML/stdout/stderr. The report is marked incomplete before execution, so a failed rerun cannot retain a prior success. CI installs extras from the built wheel and runs both package checks.
+
+On 2026-11-18, the core and provider checks both passed in a fresh venv after normal pip installation of the built wheel with its declared extras and pytest, with no copied development dependencies. The provider matrix passed 21/21 with no skips on LangGraph 1.2.22, OpenAI 2.54.0, Anthropic 0.125.0, and HTTPX 0.28.1. Reports and logs are retained locally under `results/pilot_readiness/`. This verifies local installation and execution; GitHub CI remains unrun under the no-push instruction.
