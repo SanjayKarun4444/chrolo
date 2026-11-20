@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible Chrolo defect with a synthetic example.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include private traces, credentials, personal data, or exploit details.
+        For vulnerabilities, follow SECURITY.md and use private reporting when available.
+  - type: input
+    id: version
+    attributes:
+      label: Chrolo version or commit
+      description: Run python -m chrolo --version; include the commit for source installations.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, and relevant framework/provider package versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Synthetic reproduction
+      description: Include the command and a small non-sensitive example. Raw production captures are not required.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Distinguish the original failure, a replay mismatch, and an unrelated error.
+    validations:
+      required: true

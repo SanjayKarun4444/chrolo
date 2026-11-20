@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+from importlib.metadata import PackageNotFoundError, version
 import os
 from pathlib import Path
 from typing import Any
@@ -455,6 +456,11 @@ def prepare_cmd(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Chrolo: reduce agent failures to regression tests")
+    try:
+        installed_version = version("chrolo-starter")
+    except PackageNotFoundError:
+        installed_version = "uninstalled"
+    parser.add_argument("--version", action="version", version="chrolo " + installed_version)
     command = parser.add_subparsers(dest="command", required=True)
     prepare = command.add_parser("prepare", help="Verify and minimize a cassette-backed capture into a local regression bundle")
     prepare.add_argument("trace", type=Path)

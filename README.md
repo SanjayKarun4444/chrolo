@@ -6,6 +6,8 @@ Chrolo captures the inputs and explicitly wrapped model/tool interactions behind
 
 **Python 3.10+ · MIT licensed · Experimental alpha**
 
+Alpha version: **0.2.0a1**. See the [release notes](docs/releases/0.2.0a1.md) and [changelog](CHANGELOG.md). Source installation is documented below; package-registry publication is a separate step.
+
 [Quickstart](#quickstart) · [Documentation](#documentation) · [Examples](examples/README.md) · [Contributing](CONTRIBUTING.md)
 
 ## Why Chrolo?
@@ -49,6 +51,7 @@ Then install Chrolo and pytest:
 ```bash
 python -m pip install -e '.[dev]'
 python -m chrolo --help
+python -m chrolo --version
 ```
 
 For the supported SDK and LangGraph examples:
@@ -173,7 +176,7 @@ Use `python -m chrolo <command> --help` for arguments. The `chrolo` console comm
 
 The latest local validation checkpoint is **2026-11-19**:
 
-- **291 tests passed**, with three opt-in Docker cases skipped in the standard suite.
+- **306 tests passed**, with three opt-in Docker cases skipped in the standard suite.
 - **28 real-action regression-gate checks passed** across three repository tasks, including repeated failure replay, passing empty controls, and paired action-removal controls.
 - **21 SDK/LangGraph integration checks** cover the supported OpenAI and Anthropic interfaces; they also passed against an installed wheel outside the checkout. Provider responses use local HTTP fixtures.
 
@@ -185,7 +188,7 @@ The latest local validation checkpoint is **2026-11-19**:
 
 The PyFilesystem screen retained all three preselected candidates: two negative results and one reproducible failure, each screened three times. These selected cases establish task-specific evidence, not corpus-wide reliability or measured developer time savings. Minimality means 1-minimal under tested cascade deletions within the check budget; it does not mean globally smallest. Existing synthetic benchmarks do not establish an efficiency advantage over a naive deletion baseline.
 
-Full methods, controls, negative outcomes, and limitations are in the [benchmark guide](benchmarks/README.md) and [PyFilesystem evidence](docs/pyfilesystem-evidence.md). Fresh installed-wheel checks also pass the core workflow and all 44 Docker-runner contract checks outside the checkout. Hosted GitHub Actions execution and an external developer trial remain unverified.
+Full methods, controls, negative outcomes, and limitations are in the [benchmark guide](benchmarks/README.md) and [PyFilesystem evidence](docs/pyfilesystem-evidence.md). Fresh installed-wheel checks also pass the core workflow and all 44 Docker-runner contract checks outside the checkout. Hosted CI passed the preceding runtime milestone; the updated alpha-candidate workflow awaits an authorized push. An external developer trial remains open.
 
 ## Replay boundaries and trace privacy
 
@@ -206,7 +209,7 @@ python -m pytest -q
 
 Optional integrations may skip when their dependencies are absent. Real-action Docker gates require explicit opt-in, retained local fixtures, and the pinned task images; see [benchmark setup](benchmarks/README.md#repeatable-local-real-agent-regression-checks).
 
-The repository includes a [CI workflow](.github/workflows/ci.yml) for Python 3.10 and 3.12, wheel smoke checks, and packaged SDK workflows. See [CONTRIBUTING.md](CONTRIBUTING.md) for development practices and useful areas to contribute.
+The repository includes a [CI workflow](.github/workflows/ci.yml) for Python 3.10 and 3.12 on Linux and Windows, source/wheel metadata and content checks, and packaged SDK workflows. See [CONTRIBUTING.md](CONTRIBUTING.md) for development practices and useful areas to contribute.
 
 ## Documentation
 
@@ -219,6 +222,7 @@ The repository includes a [CI workflow](.github/workflows/ci.yml) for Python 3.1
 | [PyFilesystem evidence](docs/pyfilesystem-evidence.md) | Three-candidate screen, minimal case, and source-fix verification |
 | [Replay privacy review](docs/replay-privacy-review.md) | Privacy behavior and verified replay diagnostics |
 | [Roadmap](docs/roadmap.md) | Current priorities and implementation scope |
+| [Launch runbook](docs/launch-runbook.md) | Candidate validation, release assets, and separately authorized publication steps |
 
 ## Project status
 

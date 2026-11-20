@@ -1,0 +1,12 @@
+include README.md LICENSE CONTRIBUTING.md SECURITY.md CHANGELOG.md .gitignore
+recursive-include docs *.md
+recursive-include .github *.yml *.md
+recursive-include examples *.py *.json *.md
+recursive-include benchmarks *.py *.json *.md
+recursive-include tests *.py *.md *.pem
+prune results
+prune data
+prune AgentTelemetry
+prune .venv
+prune .git
+global-exclude __pycache__ *.py[cod] .env .env.*

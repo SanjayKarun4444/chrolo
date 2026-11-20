@@ -1,0 +1,17 @@
+name: Feature request
+description: Describe a workflow Chrolo should support.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Developer problem
+      description: What are you trying to reproduce, reduce, or keep as a regression?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and scope
+      description: Include framework/API boundaries, alternatives, and a synthetic example where useful.
+    validations:
+      required: true
