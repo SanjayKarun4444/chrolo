@@ -1,6 +1,10 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.chrolo-local/
+.env
+.env.*
+!.env.example
 *.py[cod]
 *.egg-info/
 dist/
